@@ -35,9 +35,16 @@ class AIService {
                 },
                 timeout: 10000 // Timeout de 10 secondes
             });
-            
-            return response.status === 200;
+            // We check if the response status is 200 (OK)
+            if (response.status === 200) {
+                // If the status is 200, OpenRouter is available
+                return true;
+            } else {
+                // If the status is not 200, OpenRouter is not available
+                return false;
+            }
         } catch {
+            // If there is an error (for example, network error), we return false
             return false;
         }
     }
@@ -50,25 +57,16 @@ class AIService {
         numberOfQuestions: number = 3
     ): Promise<AIGeneratedQuestions> {
         try {
-            // 🔹 ÉTAPE 1: Vérification FRONTEND d'abord
-            const isOpenRouterAvailable = await this.checkOpenRouterAvailability();
-            if (!isOpenRouterAvailable) {
-                return {
-                    questions: [],
-                    error: ' Frontend: OpenRouter est indisponible. Service temporairement hors ligne.'
-                };
-            }
-
-            // 🔹 ÉTAPE 2: Si frontend OK, vérifier le token
+            // Récupérer le token d'authentification
             const token = localStorage.getItem('jwt_token');
             if (!token) {
                 return {
                     questions: [],
-                    error: ' Frontend: Vous devez être connecté pour utiliser cette fonctionnalité.'
+                    error: 'Vous devez être connecté pour utiliser cette fonctionnalité.'
                 };
             }
 
-            // 🔹 ÉTAPE 3: Si tout OK côté frontend, appeler le backend
+            // Appeler le backend Symfony qui fait le proxy vers OpenRouter
             const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://localhost:8000';
             const requestUrl = `${apiBaseUrl}/api/ai/generate-questions`;
             
@@ -84,59 +82,40 @@ class AIService {
                 })
             });
 
-            // 🔹 ÉTAPE 4: Traiter la réponse du backend
             if (!response.ok) {
-                // Essayer de récupérer le message d'erreur du backend
-                try {
-                    const errorData = await response.json();
-                    if (errorData.error) {
-                        return {
-                            questions: [],
-                            error: ` Backend: ${errorData.error}`
-                        };
-                    }
-                } catch {
-                    // Si pas de JSON, utiliser le texte brut
-                    const errorText = await response.text();
-                    return {
-                        questions: [],
-                        error: ` Backend: Erreur ${response.status} - ${errorText}`
-                    };
-                }
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
 
             const data = await response.json();
 
             if (data.error) {
-                return {
-                    questions: [],
-                    error: ` Backend: ${data.error}`
-                };
+                throw new Error(data.error);
             }
 
             return {
                 questions: data.questions || [],
                 message: data.message || `Génération réussie de ${data.questions?.length || 0} questions`
             };
-
         } catch (error) {
-            // 🔹 ÉTAPE 5: Erreurs non prévues (réseau, etc.)
-            let errorMessage = ' Frontend: Erreur lors de la génération des questions';
-            
+            let errorMessage = 'Erreur lors de la génération des questions';
             if (error instanceof Error) {
-                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-                    errorMessage = ' Frontend: Impossible de contacter le serveur. Vérifiez votre connexion.';
+                if (error.message.includes('401')) {
+                    errorMessage = 'Vous devez être connecté pour utiliser cette fonctionnalité.';
+                } else if (error.message.includes('500')) {
+                    errorMessage = 'Erreur serveur. Vérifiez la configuration OpenRouter.';
                 } else {
-                    errorMessage = ` Frontend: ${error.message}`;
+                    errorMessage = error.message;
                 }
             }
-
             return {
                 questions: [],
                 error: errorMessage
             };
         }
     }
+
+
 
     /**
      * Convertit les questions générées par l'IA au format de l'API pour envoyer a mon component AiGeneratedQuestions
