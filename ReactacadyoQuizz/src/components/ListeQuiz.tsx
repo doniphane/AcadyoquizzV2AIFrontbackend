@@ -90,7 +90,7 @@ function ListeQuiz({
                       ? `Créé le ${new Date(quiz.createdAt).toLocaleDateString()}`
                       : "Date inconnue"}
                   </p>
-                  <span className="px-3 py-1 bg-yellow-400 text-gray-900 rounded-full text-sm font-medium">
+                  <span className="px-3 py-1 bg-yellow-400 text-gray-900 rounded-full text-sm font-medium mr-2">
                     {quiz.accessCode || "MATH01"}
                   </span>
                   <span
@@ -109,11 +109,7 @@ function ListeQuiz({
                   <Button
                     onClick={() => onToggleStatus(quiz.id, quiz.isActive)}
                     disabled={loadingQuizId === quiz.id}
-                    className={`${
-                      quiz.isActive
-                        ? "bg-orange-500 hover:bg-orange-600"
-                        : "bg-green-500 hover:bg-green-600"
-                    } text-white flex-1`}
+                    className="bg-gray-800 hover:bg-gray-700 text-white flex-1"
                   >
                     {loadingQuizId === quiz.id ? (
                       <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
@@ -127,7 +123,7 @@ function ListeQuiz({
 
                   <Button
                     onClick={() => navigate(`/manage-questions/${quiz.id}`)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white flex-1"
+                    className="bg-gray-800 hover:bg-gray-700 text-white flex-1"
                   >
                     <Edit className="w-4 h-4 mr-2" />
                     Modifier
@@ -144,7 +140,7 @@ function ListeQuiz({
                   <Button
                     onClick={() => onDeleteQuiz(quiz.id, quiz.title)}
                     disabled={loadingQuizId === quiz.id}
-                    className="bg-red-600 hover:bg-red-700 text-white flex-1"
+                    className="bg-gray-800 hover:bg-gray-700 text-white flex-1"
                   >
                     {loadingQuizId === quiz.id ? (
                       <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
