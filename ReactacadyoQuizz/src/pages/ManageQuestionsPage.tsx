@@ -14,6 +14,9 @@ import AuthService from '../services/AuthService';
 // Import des composants personnalisés
 import { QuestionsList, AddQuestionForm, AIGeneratedQuestions } from '../components';
 
+// Import des types
+import type { ApiQuestionData, ApiAnswerData } from '../types/managequestion';
+
 // =============================================================================
 // INTERFACES ET TYPES
 // =============================================================================
@@ -65,6 +68,19 @@ function handleApiError(error: unknown): string {
     if (error && typeof error === 'object' && 'response' in error) {
         const axiosError = error as { response: { status: number; data?: unknown } };
         const status = axiosError.response.status;
+        
+        // Pour les erreurs 422, afficher les détails de validation
+        if (status === 422 && axiosError.response.data) {
+            const errorData = axiosError.response.data as { error?: string; violations?: Array<{ propertyPath: string; message: string }> };
+            if (errorData.error) {
+                return `Erreur de validation: ${errorData.error}`;
+            }
+            if (errorData.violations && Array.isArray(errorData.violations)) {
+                const violations = errorData.violations.map((v) => `${v.propertyPath}: ${v.message}`).join(', ');
+                return `Erreurs de validation: ${violations}`;
+            }
+            return 'Données invalides. Vérifiez vos informations.';
+        }
         
         switch (status) {
             case 401:
@@ -288,6 +304,59 @@ function ManageQuestionsPage() {
         }
     };
 
+    // Fonction pour mettre à jour une question existante
+    const handleQuestionUpdate = async (questionId: number, updatedQuestion: ApiQuestionData): Promise<void> => {
+        if (!quiz) {
+            throw new Error('Quiz non disponible');
+        }
+
+        setIsSubmitting(true);
+
+        try {
+            // Vérifier l'authentification avant l'appel API
+            const isAuthenticated = await checkAuthentication();
+            if (!isAuthenticated) {
+                throw new Error('Vous devez être connecté pour modifier une question');
+            }
+
+            // Préparer les données pour l'API
+            const questionData = {
+                texte: updatedQuestion.texte,
+                numeroOrdre: updatedQuestion.numeroOrdre,
+                questionnaire: `/api/questionnaires/${quiz.id}`,
+                reponses: updatedQuestion.reponses.map((reponse: ApiAnswerData, index: number) => ({
+                    texte: reponse.texte,
+                    estCorrecte: reponse.correct,
+                    numeroOrdre: index + 1
+                }))
+            };
+
+            // Appel API pour mettre à jour la question
+                            await axios.put(
+                    `${import.meta.env.VITE_API_BASE_URL}/api/questions/${questionId}`,
+                    questionData
+                );
+
+            // Recharger les données du quiz
+            await fetchQuiz();
+
+        } catch (error) {
+            console.error('Erreur lors de la mise à jour de la question:', error);
+            if (error && typeof error === 'object' && 'response' in error) {
+                const axiosError = error as { response: { status: number; data?: unknown } };
+                console.error('Détails de l\'erreur:', {
+                    status: axiosError.response.status,
+                    data: axiosError.response.data
+                });
+
+            }
+            const errorMessage = handleApiError(error);
+            throw new Error(errorMessage);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     // Fonction pour retourner au dashboard
     const handleBackToDashboard = (): void => {
         navigate('/admin');
@@ -325,6 +394,7 @@ function ManageQuestionsPage() {
                         // @ts-expect-error - Type mismatch between API response and component props
                         questions={quiz.questions}
                         quizTitle={quiz.title}
+                        onQuestionUpdate={handleQuestionUpdate}
                     />
                 </div>
 

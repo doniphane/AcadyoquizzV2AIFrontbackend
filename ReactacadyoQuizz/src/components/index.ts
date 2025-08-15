@@ -10,6 +10,7 @@ export { default as MetricsDashboard } from './MetricsDashboard';
 export { default as QuestionsList } from './QuestionsList';
 export { default as AddQuestionForm } from './AddQuestionForm';
 export { default as AIGeneratedQuestions } from './AIGeneratedQuestions';
+export { default as EditQuestionForm } from './EditQuestionForm';
 
 // Composants de résultats de quiz
 export { default as QuizMetrics } from './QuizMetrics';

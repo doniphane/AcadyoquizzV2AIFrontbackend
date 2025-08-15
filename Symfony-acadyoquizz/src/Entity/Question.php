@@ -24,7 +24,6 @@ use Symfony\Component\Validator\Constraints as Assert;
         new Get(),
         new GetCollection(),
         new Post(processor: QuestionDataPersister::class),
-        new Put(),
         new Delete()
     ],
     normalizationContext: ['groups' => ['question:read']],

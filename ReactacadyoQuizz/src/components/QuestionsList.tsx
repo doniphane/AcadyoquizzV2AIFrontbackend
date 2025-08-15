@@ -1,20 +1,47 @@
 // Composant pour afficher la liste des questions d'un quiz
 // Ce composant affiche toutes les questions d'un quiz avec leurs réponses
 
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, XCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CheckCircle, XCircle, Edit } from 'lucide-react';
 
 // Import des types
 import type { ApiQuestionData, ApiAnswerData } from '../types/managequestion';
+
+// Import du composant de modification
+import EditQuestionForm from './EditQuestionForm';
 
 // Interface pour les props du composant
 interface QuestionsListProps {
     questions: ApiQuestionData[];
     quizTitle: string;
+    onQuestionUpdate?: (questionId: number, updatedQuestion: ApiQuestionData) => Promise<void>;
 }
 
-function QuestionsList({ questions, quizTitle }: QuestionsListProps) {
+function QuestionsList({ questions, quizTitle, onQuestionUpdate }: QuestionsListProps) {
+    // État pour gérer quelle question est en cours de modification
+    const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
+
+    // Fonction pour commencer la modification d'une question
+    const handleStartEdit = (questionId: number): void => {
+        setEditingQuestionId(questionId);
+    };
+
+    // Fonction pour annuler la modification
+    const handleCancelEdit = (): void => {
+        setEditingQuestionId(null);
+    };
+
+    // Fonction pour sauvegarder les modifications
+    const handleSaveEdit = async (questionId: number, updatedQuestion: ApiQuestionData): Promise<void> => {
+        if (onQuestionUpdate) {
+            await onQuestionUpdate(questionId, updatedQuestion);
+        }
+        setEditingQuestionId(null);
+    };
+
     // Si aucune question, afficher un message informatif
     if (!questions || questions.length === 0) {
         return (
@@ -50,9 +77,23 @@ function QuestionsList({ questions, quizTitle }: QuestionsListProps) {
                             key={`question-${question.id}-${index}`} 
                             className="border border-gray-200 rounded-lg p-4 bg-white"
                         >
-                            <h5 className="font-semibold text-gray-900 mb-3">
-                                Question {index + 1}: {question.texte || 'Question sans texte'}
-                            </h5>
+                            {/* En-tête de la question avec bouton modifier */}
+                            <div className="flex justify-between items-start mb-3">
+                                <h5 className="font-semibold text-gray-900">
+                                    Question {index + 1}: {question.texte || 'Question sans texte'}
+                                </h5>
+                                <Button
+                                    onClick={() => handleStartEdit(question.id)}
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex items-center gap-2 text-blue-600 border-blue-300 hover:bg-blue-50"
+                                >
+                                    <Edit className="w-4 h-4" />
+                                    Modifier
+                                </Button>
+                            </div>
+
+                            {/* Affichage des réponses */}
                             <div className="ml-4 space-y-3">
                                 {question.reponses && Array.isArray(question.reponses) && 
                                     question.reponses.map((answer: ApiAnswerData, answerIndex: number) => (
@@ -108,6 +149,15 @@ function QuestionsList({ questions, quizTitle }: QuestionsListProps) {
                                     ))
                                 }
                             </div>
+
+                            {/* Formulaire de modification (affiché seulement si la question est en cours d'édition) */}
+                            {editingQuestionId === question.id && (
+                                <EditQuestionForm
+                                    question={question}
+                                    onSave={(updatedQuestion) => handleSaveEdit(question.id, updatedQuestion)}
+                                    onCancel={handleCancelEdit}
+                                />
+                            )}
                         </div>
                     ))}
                 </div>
