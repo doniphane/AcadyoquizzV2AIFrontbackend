@@ -34,7 +34,7 @@ function QuizResultsPage() {
 
     // Hook pour récupérer les données passées en navigation
     const location = useLocation() as CustomLocation;
-    const { quizInfo, userAnswers, results: backendResults }: Partial<QuizResultsLocationState> = location.state || {};
+    const { quizInfo, userAnswers }: Partial<QuizResultsLocationState> = location.state || {};
 
     // État pour stocker les résultats calculés
     const [results, setResults] = useState<CalculatedResults | null>(null);
@@ -55,94 +55,59 @@ function QuizResultsPage() {
                 const response: AxiosResponse<{ questions: QuizQuestion[] }> = await axios.get(`${API_BASE_URL}/api/public/questionnaires/${quizInfo.id}`);
                 const questions: QuizQuestion[] = response.data.questions || [];
 
-                // Si on a les résultats du backend, on les utilise
-                if (backendResults) {
-                    const userAnswersDetails: UserAnswerDetail[] = [];
+                // Calcul côté frontend
+                let correctAnswers: number = 0;
+                const userAnswersDetails: UserAnswerDetail[] = [];
 
-                    // Si le backend a fourni les détails des réponses, on les utilise
-                    if (backendResults.responseDetails) {
-                        backendResults.responseDetails.forEach((detail) => {
-                            userAnswersDetails.push({
-                                questionId: detail.questionId,
-                                questionText: detail.questionText,
-                                userAnswer: {
-                                    id: detail.userAnswer.id,
-                                    texte: detail.userAnswer.text, 
-                                    numeroOrdre: 0, // Valeur par défaut
-                                    correct: detail.userAnswer.isCorrect 
-                                },
-                                correctAnswer: {
-                                    id: detail.correctAnswer.id,
-                                    texte: detail.correctAnswer.text, 
-                                    numeroOrdre: 0, 
-                                    correct: detail.correctAnswer.isCorrect 
-                                },
-                                isCorrect: detail.isCorrect
-                            });
-                        });
-                    } else {
-                        // Calcul côté frontend
-                        questions.forEach((question: QuizQuestion) => {
-                            const userAnswerId: number = userAnswers[question.id];
-                            const userAnswer: QuizAnswer | undefined = question.reponses.find((a: QuizAnswer) => a.id === userAnswerId);
-                            const correctAnswer: QuizAnswer | undefined = question.reponses.find((a: QuizAnswer) => a.correct);
+                questions.forEach((question: QuizQuestion) => {
+                    const userAnswerIds = userAnswers[question.id];
+                    const correctAnswersList = question.reponses.filter((a: QuizAnswer) => a.correct);
+                    const isMultipleChoice = correctAnswersList.length > 1;
+                    
+                    // Convertir en tableau pour uniformiser le traitement
+                    const userAnswerIdArray = Array.isArray(userAnswerIds) ? userAnswerIds : [userAnswerIds];
+                    const userAnswersList = question.reponses.filter((a: QuizAnswer) => 
+                        userAnswerIdArray.includes(a.id)
+                    );
 
-                            if (userAnswer && correctAnswer) {
-                                const isCorrect: boolean = userAnswer.correct || false;
+                    if (userAnswersList.length > 0 && correctAnswersList.length > 0) {
+                        // Pour les questions à choix multiples : toutes les bonnes réponses doivent être sélectionnées ET aucune mauvaise
+                        let isCorrect = false;
+                        if (isMultipleChoice) {
+                            const selectedCorrectIds = userAnswersList.filter(a => a.correct).map(a => a.id).sort();
+                            const allCorrectIds = correctAnswersList.map(a => a.id).sort();
+                            const hasOnlyCorrectAnswers = userAnswersList.every(a => a.correct);
+                            isCorrect = hasOnlyCorrectAnswers && selectedCorrectIds.length === allCorrectIds.length &&
+                                       selectedCorrectIds.every((id, index) => id === allCorrectIds[index]);
+                        } else {
+                            // Pour les questions à choix unique : la réponse doit être correcte
+                            isCorrect = userAnswersList[0]?.correct || false;
+                        }
 
-                                userAnswersDetails.push({
-                                    questionId: question.id,
-                                    questionText: question.texte,
-                                    userAnswer,
-                                    correctAnswer,
-                                    isCorrect
-                                });
-                            }
+                        if (isCorrect) {
+                            correctAnswers++;
+                        }
+
+                        userAnswersDetails.push({
+                            questionId: question.id,
+                            questionText: question.texte,
+                            userAnswers: userAnswersList,
+                            correctAnswers: correctAnswersList,
+                            isCorrect,
+                            isMultipleChoice
                         });
                     }
+                });
 
-                    setResults({
-                        score: backendResults.score,
-                        totalQuestions: backendResults.totalQuestions,
-                        percentage: backendResults.percentage,
-                        userAnswers: userAnswersDetails
-                    });
-                } else {
-                    // Calcul côté frontend si pas de résultats backend
-                    let correctAnswers: number = 0;
-                    const userAnswersDetails: UserAnswerDetail[] = [];
+                const totalQuestions: number = questions.length;
+                const percentage: number = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
 
-                    questions.forEach((question: QuizQuestion) => {
-                        const userAnswerId: number = userAnswers[question.id];
-                        const userAnswer: QuizAnswer | undefined = question.reponses.find((a: QuizAnswer) => a.id === userAnswerId);
-                        const correctAnswer: QuizAnswer | undefined = question.reponses.find((a: QuizAnswer) => a.correct);
-
-                        if (userAnswer && correctAnswer) {
-                            const isCorrect: boolean = userAnswer.correct || false;
-                            if (isCorrect) {
-                                correctAnswers++;
-                            }
-
-                            userAnswersDetails.push({
-                                questionId: question.id,
-                                questionText: question.texte, 
-                                userAnswer,
-                                correctAnswer,
-                                isCorrect
-                            });
-                        }
-                    });
-
-                    const totalQuestions: number = questions.length;
-                    const percentage: number = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
-
-                    setResults({
-                        score: correctAnswers,
-                        totalQuestions,
-                        percentage,
-                        userAnswers: userAnswersDetails
-                    });
-                }
+                setResults({
+                    score: correctAnswers,
+                    totalQuestions,
+                    percentage,
+                    userAnswers: userAnswersDetails
+                });
 
             } catch (error) {
                 console.error('Erreur lors du calcul des résultats:', error);
@@ -153,7 +118,7 @@ function QuizResultsPage() {
         };
 
         calculateResults();
-    }, [quizInfo, userAnswers, backendResults, navigate]);
+    }, [quizInfo, userAnswers, navigate]);
 
     // Fonction pour retourner à l'accueil
     const handleBackToHome = (): void => {

@@ -12,8 +12,8 @@ export interface QuizInfo {
     scorePassage?: number; // Correspond au champ 'scorePassage' de l'API Symfony
 }
 
-// Type pour les réponses utilisateur (type simple)
-export type UserAnswers = Record<number, number>;
+// Type pour les réponses utilisateur (supporte choix unique ET multiples)
+export type UserAnswers = Record<number, number | number[]>;
 
 // Interface pour l'état de navigation
 export interface QuizResultsLocationState {
@@ -26,8 +26,8 @@ export interface QuizResultsLocationState {
         responseDetails?: Array<{
             questionId: number;
             questionText: string;
-            userAnswer: { id: number; text: string; isCorrect: boolean };
-            correctAnswer: { id: number; text: string; isCorrect: boolean };
+            userAnswers: Array<{ id: number; text: string; isCorrect: boolean }>; // Changé en tableau
+            correctAnswers: Array<{ id: number; text: string; isCorrect: boolean }>; // Changé en tableau
             isCorrect: boolean;
         }>;
     };
@@ -54,13 +54,14 @@ export interface QuizQuestion {
     reponses: QuizAnswer[]; // Correspond au champ 'reponses' de l'API Symfony
 }
 
-// Interface pour les détails d'une réponse utilisateur
+// Interface pour les détails d'une réponse utilisateur (mise à jour)
 export interface UserAnswerDetail {
     questionId: number;
     questionText: string;
-    userAnswer: QuizAnswer;
-    correctAnswer: QuizAnswer;
+    userAnswers: QuizAnswer[]; // Changé en tableau pour supporter multiples réponses
+    correctAnswers: QuizAnswer[]; // Changé en tableau pour supporter multiples bonnes réponses
     isCorrect: boolean;
+    isMultipleChoice: boolean; // Nouveau champ pour identifier le type de question
 }
 
 // Interface pour les résultats calculés

@@ -24,7 +24,8 @@ interface ApiQuestion {
     id: number;
     texte: string;
     numeroOrdre: number;
-    estCorrecte: boolean;
+    correct?: boolean;      // Champ de l'API ApiPlatform
+    estCorrecte?: boolean;  // Fallback pour compatibilité
   }>;
 }
 
@@ -107,7 +108,7 @@ function TakeQuizPage() {
           id: answerData.id,
           text: answerData.texte,
           orderNumber: answerData.numeroOrdre,
-          isCorrect: answerData.estCorrecte
+          isCorrect: answerData.correct ?? answerData.estCorrecte ?? false
         }))
       }));
 
@@ -332,23 +333,12 @@ function TakeQuizPage() {
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               {currentQuestion.text}
             </h2>
-            <p className="text-gray-800">
-              {isMultipleChoiceQuestion(currentQuestion) 
-                ? "Choisissez une ou plusieurs réponses possibles" 
-                : "Choisissez une réponse"
-              }
-            </p>
+            
+            {/* Simple légende pour les choix multiples */}
             {isMultipleChoiceQuestion(currentQuestion) && (
-              <div className="mt-3 p-3 bg-yellow-400 rounded-lg text-gray-800 text-sm border-2 border-yellow-600">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">⚠️</span>
-                  <strong>Question à choix multiples</strong>
-                </div>
-                <p className="text-xs">
-                  <strong>Règle de scoring :</strong> Vous devez sélectionner TOUTES les bonnes réponses 
-                  (et aucune mauvaise) pour obtenir le point. Sinon, la question est comptée comme fausse.
-                </p>
-              </div>
+              <p className="text-gray-800 text-sm mt-2">
+                <strong>Attention :</strong> Cette question accepte plusieurs réponses correctes.
+              </p>
             )}
           </div>
 

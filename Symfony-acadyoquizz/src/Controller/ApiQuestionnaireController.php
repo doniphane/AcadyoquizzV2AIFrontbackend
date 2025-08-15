@@ -54,7 +54,8 @@ class ApiQuestionnaireController extends AbstractController
                 $reponsesData[] = [
                     'id' => $reponse->getId(),
                     'texte' => $reponse->getTexte(),
-                    'numeroOrdre' => $reponse->getNumeroOrdre()
+                    'numeroOrdre' => $reponse->getNumeroOrdre(),
+                    'correct' => $reponse->isCorrect()
                 ];
             }
 
@@ -113,7 +114,8 @@ class ApiQuestionnaireController extends AbstractController
                 $reponsesData[] = [
                     'id' => $reponse->getId(),
                     'texte' => $reponse->getTexte(),
-                    'numeroOrdre' => $reponse->getNumeroOrdre()
+                    'numeroOrdre' => $reponse->getNumeroOrdre(),
+                    'correct' => $reponse->isCorrect()
                 ];
             }
 
@@ -158,13 +160,13 @@ class ApiQuestionnaireController extends AbstractController
 
         $data = json_decode($request->getContent(), true);
 
-        if (!isset($data['participantFirstName']) || !isset($data['participantLastName']) || !isset($data['answers'])) {
+        if (!$data || !isset($data['participantFirstName']) || !isset($data['participantLastName']) || !isset($data['answers'])) {
             return new JsonResponse(['error' => 'Données manquantes'], Response::HTTP_BAD_REQUEST);
         }
 
-        // Récupérer l'utilisateur connecté s'il y en a un
+        // Récupérer l'utilisateur connecté ou null pour les utilisateurs anonymes
         $utilisateur = null;
-        if ($this->getUser() instanceof Utilisateur) {
+        if ($this->getUser()) {
             $utilisateur = $this->getUser();
         }
 
@@ -184,7 +186,7 @@ class ApiQuestionnaireController extends AbstractController
             $score = 0;
             $totalQuestions = 0;
             $reponseDetails = [];
-            $questionsTraitees = []; // Pour éviter de compter une question plusieurs fois
+            $questionsTraitees = [];
 
             foreach ($data['answers'] as $answerData) {
                 $questionId = $answerData['questionId'] ?? null;
@@ -209,93 +211,17 @@ class ApiQuestionnaireController extends AbstractController
                 $reponseUtilisateur->setDateReponse(new \DateTimeImmutable());
 
                 $entityManager->persist($reponseUtilisateur);
-
-                // Préparer les détails de la réponse
-                $reponseDetails[] = [
-                    'questionId' => $questionId,
-                    'questionTexte' => $question->getTexte(),
-                    'reponseId' => $reponseId,
-                    'reponseTexte' => $reponse->getTexte(),
-                    'estCorrecte' => $reponse->isCorrect()
-                ];
             }
-
-            // Calculer le score après avoir traité toutes les réponses
-            $questionsUniques = [];
-            foreach ($reponseDetails as $detail) {
-                $questionId = $detail['questionId'];
-                if (!isset($questionsUniques[$questionId])) {
-                    $questionsUniques[$questionId] = [
-                        'reponsesCorrectes' => 0,
-                        'reponsesIncorrectes' => 0,
-                        'totalCorrectes' => 0,
-                        'totalIncorrectes' => 0
-                    ];
-                }
-
-                // Compter les réponses de l'utilisateur
-                if ($detail['estCorrecte']) {
-                    $questionsUniques[$questionId]['reponsesCorrectes']++;
-                } else {
-                    $questionsUniques[$questionId]['reponsesIncorrectes']++;
-                }
-            }
-
-            // Calculer les totaux pour chaque question
-            foreach ($questionsUniques as $questionId => &$stats) {
-                $question = $entityManager->getRepository(Question::class)->find($questionId);
-                if ($question) {
-                    $reponsesQuestion = $question->getReponses();
-                    foreach ($reponsesQuestion as $reponse) {
-                        if ($reponse->isCorrect()) {
-                            $stats['totalCorrectes']++;
-                        } else {
-                            $stats['totalIncorrectes']++;
-                        }
-                    }
-                }
-            }
-
-            // Calculer le score final
-            $totalQuestions = count($questionsUniques);
-            foreach ($questionsUniques as $questionId => $stats) {
-                // Règle stricte : TOUTES les bonnes réponses ET AUCUNE mauvaise réponse
-                if (
-                    $stats['reponsesCorrectes'] === $stats['totalCorrectes'] &&
-                    $stats['reponsesIncorrectes'] === 0 &&
-                    $stats['totalCorrectes'] > 0
-                ) {
-                    $score++;
-                }
-                // Sinon, pas de point (même si quelques bonnes réponses)
-            }
-
-            // Mettre à jour le score de la tentative
-            $tentative->setScore($score);
-            $tentative->setNombreTotalQuestions($totalQuestions);
 
             $entityManager->flush();
 
-            // Calculer le pourcentage
-            $pourcentage = $totalQuestions > 0 ? round(($score / $totalQuestions) * 100) : 0;
-            $estReussi = $pourcentage >= $questionnaire->getScorePassage();
-
             return new JsonResponse([
-                'success' => true,
-                'message' => 'Questionnaire soumis avec succès',
-                'tentativeId' => $tentative->getId(),
-                'score' => $score,
-                'totalQuestions' => $totalQuestions,
-                'pourcentage' => $pourcentage,
-                'estReussi' => $estReussi,
-                'scorePassage' => $questionnaire->getScorePassage(),
-                'reponseDetails' => $reponseDetails
-            ], Response::HTTP_CREATED);
+                'message' => 'Quiz soumis avec succès',
+                'tentativeId' => $tentative->getId()
+            ]);
 
         } catch (\Exception $e) {
-            return new JsonResponse([
-                'error' => 'Erreur lors de la soumission du questionnaire: ' . $e->getMessage()
-            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+            return new JsonResponse(['error' => 'Erreur lors de la soumission'], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
 }

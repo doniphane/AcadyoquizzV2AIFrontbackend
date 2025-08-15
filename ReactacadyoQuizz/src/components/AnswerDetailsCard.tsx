@@ -33,13 +33,31 @@ function AnswerDetailsCard({ results }: AnswerDetailsCardProps) {
                                 Question {index + 1}: {answerDetail.questionText}
                             </h3>
                         </div>
-                        <div className="ml-8 space-y-1">
+                        <div className="ml-8 space-y-2">
                             <div className={answerDetail.isCorrect ? "text-green-600" : "text-red-600"}>
-                                <span className="font-medium">Votre réponse:</span> {answerDetail.userAnswer.texte}
+                                <span className="font-medium">
+                                    {answerDetail.isMultipleChoice ? "Vos réponses:" : "Votre réponse:"}
+                                </span>
+                                <div className="ml-2">
+                                    {answerDetail.userAnswers.map((answer) => (
+                                        <div key={answer.id} className="ml-2">
+                                            • {answer.texte}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                             {!answerDetail.isCorrect && (
                                 <div className="text-green-600">
-                                    <span className="font-medium">Réponse correcte:</span> {answerDetail.correctAnswer.texte}
+                                    <span className="font-medium">
+                                        {answerDetail.isMultipleChoice ? "Réponses correctes:" : "Réponse correcte:"}
+                                    </span>
+                                    <div className="ml-2">
+                                        {answerDetail.correctAnswers.map((answer) => (
+                                            <div key={answer.id} className="ml-2">
+                                                • {answer.texte}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                         </div>
