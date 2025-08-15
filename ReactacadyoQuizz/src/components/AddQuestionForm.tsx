@@ -217,6 +217,10 @@ function AddQuestionForm({ quizId, currentQuestionsCount, onSubmit, isSubmitting
 													disabled={isSubmitting}
 													className="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500"
 													{...register(`answers.${index}.correct` as const)}
+													onClick={(e) => {
+														// Empêcher la soumission du formulaire lors du clic sur la checkbox
+														e.stopPropagation();
+													}}
 												/>
 												<span className="text-sm font-medium text-gray-700">
 													Correct
