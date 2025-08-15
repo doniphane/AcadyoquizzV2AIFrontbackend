@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Search, Calendar, BarChart3, Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import axios from 'axios';
 import AuthService from '../services/AuthService';
 
 import { QuizMetrics, StudentsList, StudentResultsDetail, exportAllResultsPDF, exportStudentResultPDF } from '../components';
@@ -11,199 +12,208 @@ import type { Student, AnswerDetail, Metrics, QuizResultsNavigationState, QuizAt
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-// Hook personnalisé pour les appels API
-const useApi = () => {
-  const navigate = useNavigate();
-  
-  const getToken = useCallback(() => {
-    const token = AuthService.getToken();
-    if (!token) {
-      toast.error('Vous devez être connecté');
-      navigate('/login');
-      return null;
-    }
-    return token;
-  }, [navigate]);
-
-  const apiCall = useCallback(async (endpoint: string) => {
-    const token = getToken();
-    if (!token) return null;
-
-    try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (!response.ok) throw new Error(`Erreur ${response.status}`);
-      
-      const data = await response.json();
-      // Simplifie la gestion API Platform - retourne toujours un tableau
-      return Array.isArray(data) ? data : (data.member || data['hydra:member'] || []);
-    } catch (error) {
-      console.error(`Erreur API ${endpoint}:`, error);
-      throw error;
-    }
-  }, [getToken]);
-
-  return { apiCall };
-};
-
-// Hook pour les métriques
-const useMetrics = (students: Student[]): Metrics => {
-  return useMemo(() => {
-    if (students.length === 0) {
-      return { totalStudents: 0, averageScore: 0, bestScore: 0, lowestScore: 0, successRate: 0 };
-    }
-
-    const percentages = students.map(s => s.percentage);
-    const average = Math.round(percentages.reduce((a, b) => a + b, 0) / students.length);
-    const best = Math.max(...percentages);
-    const lowest = Math.min(...percentages);
-    const success = Math.round((students.filter(s => s.percentage >= 70).length / students.length) * 100);
-
-    return {
-      totalStudents: students.length,
-      averageScore: average,
-      bestScore: best,
-      lowestScore: lowest,
-      successRate: success
-    };
-  }, [students]);
-};
-
-// Hook pour charger les données du quiz
-const useQuizData = (quizId: string) => {
-  const [students, setStudents] = useState<Student[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { apiCall } = useApi();
-
-  const loadQuizResults = useCallback(async () => {
-    if (!quizId) return;
-
-    try {
-      setLoading(true);
-      const attempts = await apiCall('/api/tentative_questionnaires');
-      if (!attempts) return;
-
-      // Filtrer et transformer en une seule étape
-      const studentsData = attempts
-        .filter((attempt: QuizAttempt) => attempt.questionnaire?.includes(quizId))
-        .map((attempt: QuizAttempt) => {
-          const percentage = attempt.nombreTotalQuestions && attempt.score
-            ? Math.round((attempt.score / attempt.nombreTotalQuestions) * 100)
-            : 0;
-
-          return {
-            id: attempt.id,
-            name: `${attempt.prenomParticipant} ${attempt.nomParticipant}`,
-            email: `${attempt.prenomParticipant}${attempt.nomParticipant}@gmail.com`,
-            date: new Date(attempt.dateDebut).toLocaleDateString('fr-FR'),
-            score: attempt.score || 0,
-            totalQuestions: attempt.nombreTotalQuestions || 0,
-            percentage
-          };
-        });
-
-      setStudents(studentsData);
-    } catch {
-      toast.error('Erreur lors du chargement des résultats');
-    } finally {
-      setLoading(false);
-    }
-  }, [quizId, apiCall]);
-
-  useEffect(() => {
-    loadQuizResults();
-  }, [loadQuizResults]);
-
-  return { students, loading };
-};
-
-// Hook pour les détails d'un étudiant
-const useStudentDetails = (quizId: string) => {
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [studentAnswers, setStudentAnswers] = useState<AnswerDetail[]>([]);
-  const { apiCall } = useApi();
-
-  const handleStudentSelect = useCallback(async (student: Student) => {
-    setSelectedStudent(student);
-
-    try {
-      // Charger toutes les données en parallèle
-      const [questions, answers, userAnswers] = await Promise.all([
-        apiCall('/api/questions'),
-        apiCall('/api/reponses'),
-        apiCall('/api/reponse_utilisateurs')
-      ]);
-
-      if (!questions || !answers || !userAnswers) return;
-
-      // Filtrer et transformer
-      const quizQuestions = questions.filter((q: QuizQuestion) => q.questionnaire?.includes(quizId));
-      const studentUserAnswers = userAnswers.filter((ua: UserAnswer) => 
-        ua.tentativeQuestionnaire?.includes(student.id.toString())
-      );
-
-      // Créer les détails des réponses
-      const answersDetails = studentUserAnswers.map((userAnswer: UserAnswer) => {
-        const questionId = userAnswer.question?.split('/').pop();
-        const answerId = userAnswer.reponse?.split('/').pop();
-
-        const question = quizQuestions.find((q: QuizQuestion) => q.id === parseInt(questionId || '0'));
-        const questionAnswers = answers.filter((answer: QuizAnswer) => 
-          answer.question?.includes(questionId || '')
-        );
-        const selectedAnswer = questionAnswers.find((answer: QuizAnswer) => 
-          answer.id === parseInt(answerId || '0')
-        );
-        const correctAnswer = questionAnswers.find((answer: QuizAnswer) => answer.correct === true);
-
-        return {
-          questionText: question?.texte || 'Question non trouvée',
-          userAnswer: selectedAnswer?.texte || 'Réponse non trouvée',
-          correctAnswer: correctAnswer?.texte || 'Réponse correcte non trouvée',
-          isCorrect: selectedAnswer?.correct || false
-        };
-      });
-
-      setStudentAnswers(answersDetails);
-    } catch {
-      toast.error('Erreur lors du chargement des détails');
-      setStudentAnswers([]);
-    }
-  }, [quizId, apiCall]);
-
-  return { selectedStudent, studentAnswers, handleStudentSelect };
-};
+// Interface pour les données de l'API
+interface ApiResponse {
+  member?: unknown[];
+  'hydra:member'?: unknown[];
+}
 
 function QuizResultsDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   
+  // Récupération des données depuis la navigation
   const { quizId, quizTitle, quizCode } = (location.state as QuizResultsNavigationState) || {};
+  
+  // États pour les données
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [studentAnswers, setStudentAnswers] = useState<AnswerDetail[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Redirection si pas de quizId
-  useEffect(() => {
-    if (!quizId) {
-      navigate('/admin');
+  // Fonction pour vérifier l'authentification
+  const checkAuthentication = async (): Promise<boolean> => {
+    try {
+      const isAuth = await AuthService.isAuthenticated();
+      return isAuth;
+    } catch {
+      return false;
     }
-  }, [quizId, navigate]);
+  };
 
-  // Hooks personnalisés
-  const { students, loading } = useQuizData(quizId);
-  const metrics = useMetrics(students);
-  const { selectedStudent, studentAnswers, handleStudentSelect } = useStudentDetails(quizId);
+  // Fonction pour faire un appel API
+  const makeApiCall = async (endpoint: string): Promise<unknown[]> => {
+    const isAuthenticated = await checkAuthentication();
+    if (!isAuthenticated) {
+      toast.error('Session expirée. Veuillez vous reconnecter.');
+      navigate('/login');
+      return [];
+    }
 
-  // Étudiants filtrés (mémorisé)
-  const filteredStudents = useMemo(() => 
-    students.filter(student =>
+    try {
+      const response = await axios.get(`${API_BASE_URL}${endpoint}`);
+      const data = response.data;
+      
+      // Gestion de la réponse API Platform
+      if (Array.isArray(data)) {
+        return data;
+      }
+      
+      return (data as ApiResponse).member || (data as ApiResponse)['hydra:member'] || [];
+    } catch (error) {
+      console.error(`Erreur API ${endpoint}:`, error);
+      throw error;
+    }
+  };
+
+  // Fonction pour calculer les métriques
+  const calculateMetrics = (studentsList: Student[]): Metrics => {
+    if (studentsList.length === 0) {
+      return { 
+        totalStudents: 0, 
+        averageScore: 0, 
+        bestScore: 0, 
+        lowestScore: 0, 
+        successRate: 0 
+      };
+    }
+
+    const percentages = studentsList.map(student => student.percentage);
+    const average = Math.round(percentages.reduce((sum, score) => sum + score, 0) / studentsList.length);
+    const best = Math.max(...percentages);
+    const lowest = Math.min(...percentages);
+    const successCount = studentsList.filter(student => student.percentage >= 70).length;
+    const success = Math.round((successCount / studentsList.length) * 100);
+
+    return {
+      totalStudents: studentsList.length,
+      averageScore: average,
+      bestScore: best,
+      lowestScore: lowest,
+      successRate: success
+    };
+  };
+
+  // Fonction pour charger les résultats du quiz
+  const loadQuizResults = async () => {
+    if (!quizId) {
+      toast.error('ID du quiz manquant');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      const attempts = await makeApiCall('/api/tentative_questionnaires');
+      
+      // Filtrer les tentatives pour ce quiz
+      const quizAttempts = attempts.filter((attempt) => 
+        (attempt as QuizAttempt).questionnaire?.includes(quizId)
+      );
+
+      // Transformer les tentatives en données d'étudiants
+      const studentsData: Student[] = quizAttempts.map((attempt) => {
+        const quizAttempt = attempt as QuizAttempt;
+        const percentage = quizAttempt.nombreTotalQuestions && quizAttempt.score
+          ? Math.round((quizAttempt.score / quizAttempt.nombreTotalQuestions) * 100)
+          : 0;
+
+        return {
+          id: quizAttempt.id,
+          name: `${quizAttempt.prenomParticipant} ${quizAttempt.nomParticipant}`,
+          email: `${quizAttempt.prenomParticipant}${quizAttempt.nomParticipant}@gmail.com`,
+          date: new Date(quizAttempt.dateDebut).toLocaleDateString('fr-FR'),
+          score: quizAttempt.score || 0,
+          totalQuestions: quizAttempt.nombreTotalQuestions || 0,
+          percentage
+        };
+      });
+
+      setStudents(studentsData);
+    } catch (error) {
+      toast.error('Erreur lors du chargement des résultats');
+      console.error('Erreur:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fonction pour charger les détails d'un étudiant
+  const loadStudentDetails = async (student: Student) => {
+    setSelectedStudent(student);
+
+    try {
+      // Charger toutes les données en parallèle
+      const [questions, answers, userAnswers] = await Promise.all([
+        makeApiCall('/api/questions'),
+        makeApiCall('/api/reponses'),
+        makeApiCall('/api/reponse_utilisateurs')
+      ]);
+
+      // Filtrer les questions du quiz
+      const quizQuestions = questions.filter((question) => 
+        (question as QuizQuestion).questionnaire?.includes(quizId)
+      );
+
+      // Filtrer les réponses de l'étudiant
+      const studentUserAnswers = userAnswers.filter((userAnswer) => 
+        (userAnswer as UserAnswer).tentativeQuestionnaire?.includes(student.id.toString())
+      );
+
+      // Créer les détails des réponses
+      const answersDetails: AnswerDetail[] = studentUserAnswers.map((userAnswer) => {
+        const userAnswerData = userAnswer as UserAnswer;
+        const questionId = userAnswerData.question?.split('/').pop();
+        const answerId = userAnswerData.reponse?.split('/').pop();
+
+        // Trouver la question
+        const question = quizQuestions.find((q) => 
+          (q as QuizQuestion).id === parseInt(questionId || '0')
+        );
+
+        // Trouver les réponses de cette question
+        const questionAnswers = answers.filter((answer) => 
+          (answer as QuizAnswer).question?.includes(questionId || '')
+        );
+
+        // Trouver la réponse sélectionnée par l'étudiant
+        const selectedAnswer = questionAnswers.find((answer) => 
+          (answer as QuizAnswer).id === parseInt(answerId || '0')
+        );
+
+        // Trouver la réponse correcte
+        const correctAnswer = questionAnswers.find((answer) => 
+          (answer as QuizAnswer).correct === true
+        );
+
+        return {
+          questionText: (question as QuizQuestion)?.texte || 'Question non trouvée',
+          userAnswer: (selectedAnswer as QuizAnswer)?.texte || 'Réponse non trouvée',
+          correctAnswer: (correctAnswer as QuizAnswer)?.texte || 'Réponse correcte non trouvée',
+          isCorrect: (selectedAnswer as QuizAnswer)?.correct || false
+        };
+      });
+
+      setStudentAnswers(answersDetails);
+    } catch (error) {
+      toast.error('Erreur lors du chargement des détails');
+      setStudentAnswers([]);
+      console.error('Erreur:', error);
+    }
+  };
+
+  // Fonction pour filtrer les étudiants
+  const getFilteredStudents = (): Student[] => {
+    return students.filter(student =>
       student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.email.toLowerCase().includes(searchTerm.toLowerCase())
-    ), [students, searchTerm]);
+    );
+  };
 
-  // Fonctions d'export
-  const handleExportAllResults = useCallback(() => {
+  // Fonction pour exporter tous les résultats
+  const handleExportAllResults = () => {
     exportAllResultsPDF({
       students,
       quizData: {
@@ -211,9 +221,10 @@ function QuizResultsDetailPage() {
         code: quizCode || 'QUIZ01'
       }
     });
-  }, [students, quizTitle, quizCode]);
+  };
 
-  const handleExportStudentResult = useCallback(() => {
+  // Fonction pour exporter le résultat d'un étudiant
+  const handleExportStudentResult = () => {
     if (!selectedStudent) return;
     
     exportStudentResultPDF({
@@ -224,8 +235,35 @@ function QuizResultsDetailPage() {
         code: quizCode || 'QUIZ01'
       }
     });
-  }, [selectedStudent, studentAnswers, quizTitle, quizCode]);
+  };
 
+  // Fonction pour retourner à l'admin
+  const handleBackToAdmin = () => {
+    navigate('/admin');
+  };
+
+  // Fonction pour gérer la recherche
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(event.target.value);
+  };
+
+  // Charger les données au montage du composant
+  useEffect(() => {
+    loadQuizResults();
+  }, [quizId, loadQuizResults]);
+
+  // Rediriger si pas de quizId
+  useEffect(() => {
+    if (!quizId) {
+      navigate('/admin');
+    }
+  }, [quizId, navigate]);
+
+  // Calculs pour l'interface
+  const metrics = calculateMetrics(students);
+  const filteredStudents = getFilteredStudents();
+
+  // Affichage de chargement
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
@@ -240,10 +278,10 @@ function QuizResultsDetailPage() {
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
+        {/* En-tête */}
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 sm:mb-8">
           <Button
-            onClick={() => navigate('/admin')}
+            onClick={handleBackToAdmin}
             className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 mb-4 sm:mb-0"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -271,7 +309,7 @@ function QuizResultsDetailPage() {
         {/* Métriques */}
         <QuizMetrics metrics={metrics} />
 
-        {/* Recherche */}
+        {/* Recherche et filtres */}
         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 sm:mb-6 gap-4">
           <div className="relative flex-1 max-w-full sm:max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -279,7 +317,7 @@ function QuizResultsDetailPage() {
               type="text"
               placeholder="Rechercher un étudiant..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={handleSearchChange}
               className="pl-10 bg-gray-800 border-gray-700 text-white w-full"
             />
           </div>
@@ -301,7 +339,7 @@ function QuizResultsDetailPage() {
           <StudentsList 
             students={filteredStudents}
             selectedStudent={selectedStudent}
-            onStudentSelect={handleStudentSelect}
+            onStudentSelect={loadStudentDetails}
           />
 
           <StudentResultsDetail

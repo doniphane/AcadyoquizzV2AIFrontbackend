@@ -67,14 +67,14 @@ function QuizResultsPage() {
                                 questionText: detail.questionText,
                                 userAnswer: {
                                     id: detail.userAnswer.id,
-                                    texte: detail.userAnswer.text, // Utiliser le champ 'texte' de l'API Symfony
+                                    texte: detail.userAnswer.text, 
                                     numeroOrdre: 0, // Valeur par défaut
-                                    correct: detail.userAnswer.isCorrect // Utiliser le champ 'correct' de l'API Symfony
+                                    correct: detail.userAnswer.isCorrect 
                                 },
                                 correctAnswer: {
                                     id: detail.correctAnswer.id,
-                                    texte: detail.correctAnswer.text, // Utiliser le champ 'texte' de l'API Symfony
-                                    numeroOrdre: 0, // Valeur par défaut
+                                    texte: detail.correctAnswer.text, 
+                                    numeroOrdre: 0, 
                                     correct: detail.correctAnswer.isCorrect 
                                 },
                                 isCorrect: detail.isCorrect

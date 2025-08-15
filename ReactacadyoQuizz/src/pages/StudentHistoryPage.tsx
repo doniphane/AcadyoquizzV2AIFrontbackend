@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -38,56 +38,104 @@ interface ApiAttemptDetailResponse {
   reponsesDetails: ApiAttemptDetail[];
 }
 
-// Hook API unifié
-const useApi = () => {
+// Fonction pour récupérer le token d'authentification
+function getAuthToken(): string | null {
+  const token = AuthService.getToken();
+  if (!token) {
+    toast.error('Vous devez être connecté');
+    return null;
+  }
+  return token;
+}
+
+// Fonction pour faire un appel API
+async function callApi(endpoint: string): Promise<unknown> {
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error('Token non trouvé');
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Erreur ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return Array.isArray(data) ? data : (data.member || data['hydra:member'] || data);
+  } catch (error) {
+    console.error(`Erreur API ${endpoint}:`, error);
+    throw error;
+  }
+}
+
+// Fonction pour transformer les données de l'API en format TransformedAttempt
+function transformApiAttempt(attempt: ApiAttempt): TransformedAttempt {
+  const dateDebut = new Date(attempt.date);
+  
+  return {
+    id: attempt.id,
+    prenomParticipant: 'Utilisateur',
+    nomParticipant: 'Connecté',
+    dateDebut: attempt.date,
+    dateFin: undefined,
+    score: attempt.score,
+    nombreTotalQuestions: attempt.nombreTotalQuestions,
+    questionnaire: `/api/questionnaires/${attempt.id}`,
+    utilisateur: `/api/utilisateurs/current`,
+    // Champs calculés pour l'affichage
+    quizTitle: attempt.questionnaireTitre || 'Quiz sans titre',
+    quizCode: attempt.questionnaireCode || 'N/A',
+    date: dateDebut.toLocaleDateString('fr-FR'),
+    time: dateDebut.toLocaleTimeString('fr-FR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    }),
+    percentage: attempt.pourcentage || 0,
+    isPassed: attempt.estReussi || false
+  };
+}
+
+// Fonction pour transformer les détails de l'API en format AttemptDetail
+function transformApiAttemptDetails(attemptDetail: ApiAttemptDetailResponse): AttemptDetail[] {
+  if (!attemptDetail || !attemptDetail.reponsesDetails) {
+    return [];
+  }
+
+  return attemptDetail.reponsesDetails.map((detail: ApiAttemptDetail) => ({
+    questionId: detail.questionId,
+    questionText: detail.questionTexte,
+    userAnswer: detail.reponseUtilisateurTexte,
+    correctAnswer: detail.reponseCorrecteTexte,
+    isCorrect: detail.estCorrecte
+  }));
+}
+
+function StudentHistoryPage() {
   const navigate = useNavigate();
   
-  const getToken = useCallback(() => {
-    const token = AuthService.getToken();
-    if (!token) {
-      toast.error('Vous devez être connecté');
-      navigate('/login');
-      return null;
-    }
-    return token;
-  }, [navigate]);
-
-  const apiCall = useCallback(async (endpoint: string) => {
-    const token = getToken();
-    if (!token) return null;
-
-    try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      if (!response.ok) throw new Error(`Erreur ${response.status}`);
-      
-      const data = await response.json();
-      return Array.isArray(data) ? data : (data.member || data['hydra:member'] || data);
-    } catch (error) {
-      console.error(`Erreur API ${endpoint}:`, error);
-      throw error;
-    }
-  }, [getToken]);
-
-  return { apiCall };
-};
-
-// Hook pour charger l'historique des quiz
-const useQuizHistory = () => {
+  // États pour gérer les données
   const [quizAttempts, setQuizAttempts] = useState<TransformedAttempt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { apiCall } = useApi();
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // États pour les détails d'une tentative
+  const [selectedAttempt, setSelectedAttempt] = useState<TransformedAttempt | null>(null);
+  const [attemptDetails, setAttemptDetails] = useState<AttemptDetail[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
-  const loadQuizHistory = useCallback(async () => {
+  // Fonction pour charger l'historique des quiz
+  const loadQuizHistory = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
       // Utiliser le nouvel endpoint qui filtre directement les tentatives de l'utilisateur connecté
-      const attemptsArray = await apiCall('/api/user/my-attempts') as ApiAttempt[];
+      const attemptsArray = await callApi('/api/user/my-attempts') as ApiAttempt[];
       
       if (!attemptsArray) {
         setQuizAttempts([]);
@@ -95,31 +143,7 @@ const useQuizHistory = () => {
       }
 
       // Transformer les données reçues de l'endpoint /api/user/my-attempts
-      const transformedAttempts: TransformedAttempt[] = attemptsArray.map((attempt: ApiAttempt) => {
-        const dateDebut = new Date(attempt.date);
-        
-        return {
-          id: attempt.id,
-          prenomParticipant: 'Utilisateur',
-          nomParticipant: 'Connecté',
-          dateDebut: attempt.date,
-          dateFin: undefined,
-          score: attempt.score,
-          nombreTotalQuestions: attempt.nombreTotalQuestions,
-          questionnaire: `/api/questionnaires/${attempt.id}`,
-          utilisateur: `/api/utilisateurs/current`,
-          // Champs calculés pour l'affichage
-          quizTitle: attempt.questionnaireTitre || 'Quiz sans titre',
-          quizCode: attempt.questionnaireCode || 'N/A',
-          date: dateDebut.toLocaleDateString('fr-FR'),
-          time: dateDebut.toLocaleTimeString('fr-FR', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          }),
-          percentage: attempt.pourcentage || 0,
-          isPassed: attempt.estReussi || false
-        };
-      });
+      const transformedAttempts: TransformedAttempt[] = attemptsArray.map(transformApiAttempt);
       
       setQuizAttempts(transformedAttempts);
     } catch (error) {
@@ -128,44 +152,19 @@ const useQuizHistory = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [apiCall]);
+  };
 
-  useEffect(() => {
-    loadQuizHistory();
-  }, [loadQuizHistory]);
-
-  return { quizAttempts, isLoading, error };
-};
-
-// Hook pour les détails d'une tentative
-const useAttemptDetails = () => {
-  const [selectedAttempt, setSelectedAttempt] = useState<TransformedAttempt | null>(null);
-  const [attemptDetails, setAttemptDetails] = useState<AttemptDetail[]>([]);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const { apiCall } = useApi();
-
-  const loadAttemptDetails = useCallback(async (attempt: TransformedAttempt) => {
+  // Fonction pour charger les détails d'une tentative
+  const loadAttemptDetails = async (attempt: TransformedAttempt) => {
     try {
       setLoadingDetails(true);
       setSelectedAttempt(attempt);
 
       // Utiliser le nouvel endpoint pour récupérer les détails d'une tentative spécifique
-      const attemptDetail = await apiCall(`/api/user/my-attempts/${attempt.id}`) as ApiAttemptDetailResponse;
+      const attemptDetail = await callApi(`/api/user/my-attempts/${attempt.id}`) as ApiAttemptDetailResponse;
       
-      if (!attemptDetail || !attemptDetail.reponsesDetails) {
-        setAttemptDetails([]);
-        return;
-      }
-
       // Transformer les détails reçus de l'API
-      const details: AttemptDetail[] = attemptDetail.reponsesDetails.map((detail: ApiAttemptDetail) => ({
-        questionId: detail.questionId,
-        questionText: detail.questionTexte,
-        userAnswer: detail.reponseUtilisateurTexte,
-        correctAnswer: detail.reponseCorrecteTexte,
-        isCorrect: detail.estCorrecte
-      }));
-
+      const details = transformApiAttemptDetails(attemptDetail);
       setAttemptDetails(details);
     } catch (error) {
       console.error('Erreur lors de la récupération des détails:', error);
@@ -174,40 +173,31 @@ const useAttemptDetails = () => {
     } finally {
       setLoadingDetails(false);
     }
-  }, [apiCall]);
-
-  return { 
-    selectedAttempt, 
-    attemptDetails, 
-    loadingDetails, 
-    loadAttemptDetails 
   };
-};
 
-function StudentHistoryPage() {
-  const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
-
-  // Hooks personnalisés
-  const { quizAttempts, isLoading, error } = useQuizHistory();
-  const { selectedAttempt, attemptDetails, loadingDetails, loadAttemptDetails } = useAttemptDetails();
-
-  // Tentatives filtrées (mémorisées)
-  const filteredAttempts = useMemo(() => 
-    quizAttempts.filter((attempt: TransformedAttempt) => {
+  // Fonction pour filtrer les tentatives selon la recherche
+  const getFilteredAttempts = (): TransformedAttempt[] => {
+    return quizAttempts.filter((attempt: TransformedAttempt) => {
       const quizTitle = attempt.quizTitle || `${attempt.prenomParticipant} ${attempt.nomParticipant}`;
       const quizCode = attempt.quizCode || 'N/A';
       return quizTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
              quizCode.toLowerCase().includes(searchTerm.toLowerCase());
-    }), [quizAttempts, searchTerm]);
+    });
+  };
 
-  // Fonctions de navigation
-  const handleBackToStudent = useCallback(() => {
+  // Fonction pour retourner à l'accueil étudiant
+  const handleBackToStudent = () => {
     navigate('/student');
-  }, [navigate]);
+  };
 
-  const handleSearchChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+  // Fonction pour gérer le changement de recherche
+  const handleSearchChange = (e: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
+  };
+
+  // Charger l'historique au montage du composant
+  useEffect(() => {
+    loadQuizHistory();
   }, []);
 
   // Affichage de chargement
@@ -236,6 +226,9 @@ function StudentHistoryPage() {
       </div>
     );
   }
+
+  // Récupérer les tentatives filtrées
+  const filteredAttempts = getFilteredAttempts();
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">

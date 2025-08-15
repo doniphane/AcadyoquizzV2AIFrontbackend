@@ -14,6 +14,11 @@ security:
         dev:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
+        # Allow OPTIONS requests to pass through without authentication
+        options:
+            pattern: ^/api
+            methods: [OPTIONS]
+            security: false
         login:
             pattern: ^/api/login_check$
             stateless: true

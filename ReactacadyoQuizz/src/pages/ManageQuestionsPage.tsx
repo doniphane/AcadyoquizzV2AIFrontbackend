@@ -1,16 +1,12 @@
-// Composant de page de gestion des questions d'un quiz
-// Ce composant permet de visualiser et ajouter des questions à un quiz
 
-import { useState, useEffect, useCallback } from 'react';
+
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
-import type { AxiosResponse, AxiosError } from 'axios';
 
 // Import des composants UI
 import { Button } from '@/components/ui/button';
-
-// Import des icônes
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 // Import du service d'authentification
 import AuthService from '../services/AuthService';
@@ -18,22 +14,156 @@ import AuthService from '../services/AuthService';
 // Import des composants personnalisés
 import { QuestionsList, AddQuestionForm, AIGeneratedQuestions } from '../components';
 
-// Import des types
-import type { 
-    QuizWithQuestions,
-    ApiQuestion,
-    ApiQuestionData,
-    ApiError
-} from '../types/managequestion';
+// =============================================================================
+// INTERFACES ET TYPES
+// =============================================================================
 
-// URL de base de l'API Symfony
-const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL;
+// Interface pour une question
+interface Question {
+    id: number;
+    question: string;
+    reponses: string[];
+    bonneReponse: number;
+}
+
+// Interface pour un quiz avec ses questions
+interface QuizWithQuestions {
+    id: number;
+    title: string;
+    uniqueCode: string;
+    questions: Question[];
+}
+
+// Interface pour les données d'une question à envoyer à l'API
+interface ApiQuestion {
+    texte: string;
+    numeroOrdre: number;
+    questionnaire: string;
+    reponses: {
+        texte: string;
+        estCorrecte: boolean;
+        numeroOrdre: number;
+    }[];
+}
+
+// =============================================================================
+// FONCTIONS UTILITAIRES
+// =============================================================================
+
+// Fonction pour vérifier si l'utilisateur est authentifié
+async function checkAuthentication(): Promise<boolean> {
+    try {
+        const isAuth = await AuthService.isAuthenticated();
+        return isAuth;
+    } catch {
+        return false;
+    }
+}
+
+// Fonction pour gérer les erreurs d'API
+function handleApiError(error: unknown): string {
+    if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response: { status: number; data?: unknown } };
+        const status = axiosError.response.status;
+        
+        switch (status) {
+            case 401:
+                return 'Session expirée. Veuillez vous reconnecter.';
+            case 403:
+                return 'Vous n\'êtes pas autorisé à effectuer cette action';
+            case 404:
+                return 'Ressource non trouvée';
+            case 422:
+                return 'Données invalides. Vérifiez vos informations.';
+            default:
+                return 'Erreur lors de l\'opération';
+        }
+    }
+    
+    return 'Erreur réseau. Vérifiez votre connexion.';
+}
+
+// =============================================================================
+// COMPOSANTS D'INTERFACE
+// =============================================================================
+
+// Composant pour le fil d'Ariane
+function Breadcrumb({ onBack, quizTitle }: { onBack: () => void; quizTitle: string }) {
+    return (
+        <nav className="flex items-center space-x-2 text-sm text-gray-400 mb-6">
+            <button
+                onClick={onBack}
+                className="hover:text-yellow-400 transition-colors duration-200"
+            >
+                Dashboard
+            </button>
+            <span className="text-gray-600">/</span>
+            <span className="text-yellow-400 font-medium">Gérer les questions</span>
+            <span className="text-gray-600">/</span>
+            <span className="text-gray-300">{quizTitle}</span>
+        </nav>
+    );
+}
+
+// Composant pour l'en-tête de la page
+function ManageQuestionsHeader({ quiz }: { quiz: QuizWithQuestions }) {
+    return (
+        <div className="mb-8">
+            <h1 className="text-4xl font-bold text-yellow-400 mb-2">
+                Gérer les Questions
+            </h1>
+            <p className="text-gray-300 text-lg">
+                Quiz "{quiz.title}" - Code: {quiz.uniqueCode}
+            </p>
+        </div>
+    );
+}
+
+// Composant pour l'écran de chargement
+function LoadingScreen() {
+    return (
+        <div className="min-h-screen bg-gray-900 text-white p-6">
+            <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin mr-2" />
+                <span>Chargement du quiz...</span>
+            </div>
+        </div>
+    );
+}
+
+// Composant pour l'écran d'erreur
+function ErrorScreen({ error, onBack, onRetry }: { error: string; onBack: () => void; onRetry?: () => void }) {
+    return (
+        <div className="min-h-screen bg-gray-900 text-white p-6">
+            <div className="text-center py-8">
+                <p className="text-red-400 mb-4">{error}</p>
+                <div className="space-x-4">
+                    <Button 
+                        onClick={onBack} 
+                        className="bg-yellow-500 hover:bg-yellow-600 text-gray-900"
+                    >
+                        Retour au dashboard
+                    </Button>
+                    {onRetry && (
+                        <Button 
+                            onClick={onRetry} 
+                            className="bg-blue-500 hover:bg-blue-600 text-white"
+                        >
+                            Réessayer
+                        </Button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =============================================================================
+// COMPOSANT PRINCIPAL
+// =============================================================================
 
 function ManageQuestionsPage() {
-    // Hook pour la navigation entre les pages
     const navigate = useNavigate();
-
-    // Hook pour récupérer les paramètres de l'URL
     const { quizId } = useParams();
 
     // États pour les données
@@ -43,108 +173,81 @@ function ManageQuestionsPage() {
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
     // Fonction pour récupérer les données du quiz
-    const fetchQuiz = useCallback(async (): Promise<void> => {
-        if (!quizId) return;
+    const fetchQuiz = async (): Promise<void> => {
+        if (!quizId) {
+            setError('ID du quiz manquant');
+            setIsLoading(false);
+            return;
+        }
 
         try {
             setIsLoading(true);
             setError(null);
 
-            // Récupérer le token d'authentification
-            const token: string | null = AuthService.getToken();
-            if (!token) {
+            // Vérifier l'authentification avant l'appel API
+            const isAuthenticated = await checkAuthentication();
+            if (!isAuthenticated) {
                 setError('Vous devez être connecté pour accéder à cette page');
+                setIsLoading(false);
                 return;
             }
 
-            // Appeler l'API pour récupérer le questionnaire avec ses questions
-            const response: AxiosResponse<QuizWithQuestions> = await axios.get<QuizWithQuestions>(
-                `${API_BASE_URL}/api/questionnaires/${quizId}`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                }
+            // Appel API simple - l'intercepteur axios ajoute automatiquement le token
+            const response = await axios.get<QuizWithQuestions>(
+                `${import.meta.env.VITE_API_BASE_URL}/api/questionnaires/${quizId}`
             );
 
             setQuiz(response.data);
 
         } catch (error) {
-            const axiosError = error as AxiosError;
+            const errorMessage = handleApiError(error);
+            setError(errorMessage);
             
-            if (axiosError.response?.status === 404) {
-                setError('Quiz non trouvé');
-            } else if (axiosError.response?.status === 403) {
-                setError('Vous n\'êtes pas autorisé à accéder à ce quiz');
-            } else {
-                setError('Erreur lors du chargement du quiz');
+            // Si erreur 401, rediriger vers la page de connexion
+            if (error && typeof error === 'object' && 'response' in error) {
+                const axiosError = error as { response: { status: number } };
+                if (axiosError.response.status === 401) {
+                    setTimeout(() => {
+                        navigate('/login');
+                    }, 2000);
+                }
             }
         } finally {
             setIsLoading(false);
         }
-    }, [quizId]);
+    };
 
     // Récupérer les données au chargement de la page
     useEffect(() => {
         fetchQuiz();
-    }, [fetchQuiz]);
+    }, [quizId]);
 
     // Fonction pour soumettre une nouvelle question
     const handleSubmitQuestion = async (questionData: ApiQuestion): Promise<void> => {
-        if (!quiz) return;
+        if (!quiz) {
+            throw new Error('Quiz non disponible');
+        }
 
         setIsSubmitting(true);
 
         try {
-            // Récupérer le token d'authentification
-            const token: string | null = AuthService.getToken();
-            if (!token) {
+            // Vérifier l'authentification avant l'appel API
+            const isAuthenticated = await checkAuthentication();
+            if (!isAuthenticated) {
                 throw new Error('Vous devez être connecté pour ajouter une question');
             }
 
-            // Appel API pour ajouter une question
+            // Appel API simple - l'intercepteur axios ajoute automatiquement le token
             await axios.post(
-                `${API_BASE_URL}/api/questions`,
-                questionData,
-                {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    }
-                }
+                `${import.meta.env.VITE_API_BASE_URL}/api/questions`,
+                questionData
             );
 
             // Recharger les données du quiz
             await fetchQuiz();
 
         } catch (error) {
-            const axiosError = error as AxiosError<ApiError>;
-
-            let errorMessage: string = 'Erreur lors de l\'ajout de la question';
-
-            if (axiosError.response) {
-                const status: number = axiosError.response.status;
-                if (status === 401) {
-                    errorMessage = 'Vous devez être connecté pour ajouter une question';
-                } else if (status === 403) {
-                    errorMessage = 'Vous n\'êtes pas autorisé à modifier ce quiz';
-                } else if (status === 400) {
-                    errorMessage = 'Données invalides';
-                } else if (status === 422) {
-                    // Erreur de validation du backend
-                    if (axiosError.response.data?.violations) {
-                        const messages = axiosError.response.data.violations
-                            .map(v => v.message)
-                            .join(', ');
-                        errorMessage = messages;
-                    } else if (axiosError.response.data?.detail) {
-                        errorMessage = axiosError.response.data.detail;
-                    }
-                }
-            } else if (axiosError.request) {
-                errorMessage = 'Problème de connexion au serveur';
-            }
-
+            const errorMessage = handleApiError(error);
             throw new Error(errorMessage);
         } finally {
             setIsSubmitting(false);
@@ -153,28 +256,24 @@ function ManageQuestionsPage() {
 
     // Fonction pour soumettre plusieurs questions (pour l'IA)
     const handleSubmitMultipleQuestions = async (questionsData: ApiQuestion[]): Promise<void> => {
-        if (!quiz) return;
+        if (!quiz) {
+            throw new Error('Quiz non disponible');
+        }
 
         setIsSubmitting(true);
 
         try {
-            // Récupérer le token d'authentification
-            const token: string | null = AuthService.getToken();
-            if (!token) {
+            // Vérifier l'authentification avant l'appel API
+            const isAuthenticated = await checkAuthentication();
+            if (!isAuthenticated) {
                 throw new Error('Vous devez être connecté pour ajouter des questions');
             }
 
             // Ajouter chaque question une par une
             for (const questionData of questionsData) {
                 await axios.post(
-                    `${API_BASE_URL}/api/questions`,
-                    questionData,
-                    {
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        }
-                    }
+                    `${import.meta.env.VITE_API_BASE_URL}/api/questions`,
+                    questionData
                 );
             }
 
@@ -182,33 +281,7 @@ function ManageQuestionsPage() {
             await fetchQuiz();
 
         } catch (error) {
-            const axiosError = error as AxiosError<ApiError>;
-
-            let errorMessage: string = 'Erreur lors de l\'ajout des questions';
-
-            if (axiosError.response) {
-                const status: number = axiosError.response.status;
-                if (status === 401) {
-                    errorMessage = 'Vous devez être connecté pour ajouter des questions';
-                } else if (status === 403) {
-                    errorMessage = 'Vous n\'êtes pas autorisé à modifier ce quiz';
-                } else if (status === 400) {
-                    errorMessage = 'Données invalides';
-                } else if (status === 422) {
-                    // Erreur de validation du backend
-                    if (axiosError.response.data?.violations) {
-                        const messages = axiosError.response.data.violations
-                            .map(v => v.message)
-                            .join(', ');
-                        errorMessage = messages;
-                    } else if (axiosError.response.data?.detail) {
-                        errorMessage = axiosError.response.data.detail;
-                    }
-                }
-            } else if (axiosError.request) {
-                errorMessage = 'Problème de connexion au serveur';
-            }
-
+            const errorMessage = handleApiError(error);
             throw new Error(errorMessage);
         } finally {
             setIsSubmitting(false);
@@ -222,60 +295,35 @@ function ManageQuestionsPage() {
 
     // Affichage de chargement
     if (isLoading) {
-        return (
-            <div className="min-h-screen bg-gray-900 text-white p-6">
-                <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin mr-2" />
-                    <span>Chargement du quiz...</span>
-                </div>
-            </div>
-        );
+        return <LoadingScreen />;
     }
 
     // Affichage d'erreur
     if (error || !quiz) {
         return (
-            <div className="min-h-screen bg-gray-900 text-black p-6">
-                <div className="text-center py-8">
-                    <p className="text-red-400 mb-4">{error || 'Quiz non trouvé'}</p>
-                    <Button onClick={handleBackToDashboard} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900">
-                        Retour au dashboard
-                    </Button>
-                </div>
-            </div>
+            <ErrorScreen 
+                error={error || 'Quiz non trouvé'} 
+                onBack={handleBackToDashboard}
+                onRetry={error ? fetchQuiz : undefined}
+            />
         );
     }
 
     return (
         <div className="min-h-screen bg-gray-900 text-white p-6">
-            {/* Header Section */}
-            <div className="flex items-center justify-between mb-8">
-                {/* Bouton retour et titre */}
-                <div className="flex items-center gap-4">
-                    <Button
-                        onClick={handleBackToDashboard}
-                        variant="outline"
-                        className="border-gray-600 text-black hover:bg-gray-800 hover:text-white"
-                    >
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Retour au dashboard
-                    </Button>
-                    <div>
-                        <h1 className="text-4xl font-bold text-yellow-400 mb-2">
-                            Gérer les Questions
-                        </h1>
-                        <p className="text-gray-300 text-lg">
-                            Quiz "{quiz.title}" - Code: {quiz.uniqueCode}
-                        </p>
-                    </div>
-                </div>
-            </div>
+            {/* Fil d'Ariane */}
+            <Breadcrumb onBack={handleBackToDashboard} quizTitle={quiz.title} />
 
+            {/* En-tête de la page */}
+            <ManageQuestionsHeader quiz={quiz} />
+
+            {/* Contenu principal */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Section principale - Liste des questions */}
                 <div className="lg:col-span-2">
                     <QuestionsList 
-                        questions={quiz.questions as unknown as ApiQuestionData[]}
+                        // @ts-expect-error - Type mismatch between API response and component props
+                        questions={quiz.questions}
                         quizTitle={quiz.title}
                     />
                 </div>

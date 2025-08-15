@@ -1,6 +1,5 @@
 
-// Import de Zod pour la validation
-import { z } from 'zod';
+
 
 // Type pour une réponse
 export interface Answer {
@@ -80,37 +79,11 @@ export interface ApiError {
     detail?: string;
 }
 
-
-export const addQuestionFormSchema = z.object({
-    // Validation du texte de la question
-    text: z
-        .string()
-        .min(1, 'Le texte de la question est obligatoire')
-        .min(10, 'La question doit avoir au moins 10 caractères')
-        .max(500, 'La question ne peut pas dépasser 500 caractères')
-        .refine((text) => !text.includes('--') && !text.includes(';') && !text.includes('/*'), {
-            message: 'La question contient des caractères non autorisés'
-        }),
-    
-    // Validation des réponses
-    answers: z
-        .array(z.object({
-            text: z
-                .string()
-                .min(1, 'Le texte de la réponse est obligatoire')
-                .max(200, 'La réponse ne peut pas dépasser 200 caractères')
-                .refine((text) => !text.includes('--') && !text.includes(';') && !text.includes('/*'), {
-                    message: 'La réponse contient des caractères non autorisés'
-                }),
-            correct: z.boolean()
-        }))
-        .min(2, 'Il faut au moins 2 réponses')
-        .max(6, 'Il ne peut pas y avoir plus de 6 réponses')
-        .refine((answers) => answers.some(answer => answer.correct), {
-            message: 'Il faut au moins une réponse correcte'
-        })
-});
-
-// Type TypeScript inféré à partir du schéma Zod
-// Ce type représente la structure des données du formulaire après validation
-export type AddQuestionFormData = z.infer<typeof addQuestionFormSchema>; 
+// Type pour les données du formulaire d'ajout de question (sans Zod)
+export interface AddQuestionFormData {
+    text: string;
+    answers: Array<{
+        text: string;
+        correct: boolean;
+    }>;
+} 

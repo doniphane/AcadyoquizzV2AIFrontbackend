@@ -24,6 +24,8 @@ export interface UserInfo {
     roles: string[];
     prenom?: string;
     nom?: string;
+    firstName?: string; 
+    lastName?: string;  
 }
 
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL;
@@ -99,9 +101,11 @@ class AuthService {
                 id: userInfo.id,
                 email: userInfo.email,
                 roles: userInfo.roles,
-                prenom: userInfo.prenom,
-                nom: userInfo.nom,
-                name: userInfo.prenom && userInfo.nom ? `${userInfo.prenom} ${userInfo.nom}` : userInfo.email
+                prenom: userInfo.firstName || userInfo.prenom,  
+                nom: userInfo.lastName || userInfo.nom,        
+                name: (userInfo.firstName || userInfo.prenom) && (userInfo.lastName || userInfo.nom) 
+                    ? `${userInfo.firstName || userInfo.prenom} ${userInfo.lastName || userInfo.nom}` 
+                    : userInfo.email
             };
             
             return user;

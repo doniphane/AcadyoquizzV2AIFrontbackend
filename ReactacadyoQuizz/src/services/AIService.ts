@@ -1,7 +1,5 @@
-// Service pour communiquer avec l'IA via OpenRouter
-// Ce service permet de générer des questions et réponses à partir de texte
-import axios from 'axios';
-import type { AxiosResponse } from 'axios';
+
+
 
 // Interface pour les données de réponse de l'IA
 interface AIQuestionResponse {
@@ -19,33 +17,122 @@ interface AIGeneratedQuestions {
     error?: string;
 }
 
-// Configuration pour OpenRouter (géré par le backend)
-const OPENROUTER_API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY;
+// Interface pour la réponse de test de disponibilité
+interface AvailabilityResponse {
+    isAvailable: boolean;
+    message?: string;
+    error?: string;
+}
+
+
 
 class AIService {
-    /**
-     * Vérifie si OpenRouter est disponible
-     */
-    static async checkOpenRouterAvailability(): Promise<boolean> {
+   
+    static async checkOpenRouterAvailability(): Promise<AvailabilityResponse> {
         try {
-            const response: AxiosResponse = await axios.get('https://openrouter.ai/api/v1/models', {
-                headers: {
-                    'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 10000 // Timeout de 10 secondes
-            });
-            // We check if the response status is 200 (OK)
-            if (response.status === 200) {
-                // If the status is 200, OpenRouter is available
-                return true;
-            } else {
-                // If the status is not 200, OpenRouter is not available
-                return false;
+            // Récupérer le token d'authentification
+            const token = localStorage.getItem('jwt_token');
+            if (!token) {
+                return {
+                    isAvailable: false,
+                    error: 'Vous devez être connecté pour tester la disponibilité.'
+                };
             }
+
+            // Appeler le backend Symfony qui teste OpenRouter
+            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'https://localhost:8000';
+            const requestUrl = `${apiBaseUrl}/api/ai/check-availability`;
+            
+            const response = await fetch(requestUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+
+            const data = await response.json();
+            
+            return {
+                isAvailable: data.isAvailable || false,
+                message: data.message || 'Test de disponibilité terminé'
+            };
+
+        } catch (error) {
+            let errorMessage = 'Erreur lors du test de disponibilité';
+            
+            if (error instanceof Error) {
+                if (error.message.includes('401')) {
+                    errorMessage = 'Vous devez être connecté pour tester la disponibilité.';
+                } else if (error.message.includes('500')) {
+                    errorMessage = 'Erreur serveur. Vérifiez la configuration OpenRouter.';
+                } else if (error.message.includes('timeout')) {
+                    errorMessage = 'Timeout de la connexion. Vérifiez votre connexion internet.';
+                } else {
+                    errorMessage = error.message;
+                }
+            }
+
+            return {
+                isAvailable: false,
+                error: errorMessage
+            };
+        }
+    }
+
+
+
+    /**
+     * Vérifie la disponibilité d'OpenRouter et génère des questions en une seule opération
+     * Cette méthode affiche un toast informatif et lance la génération
+     */
+    static async generateQuestionsWithAvailabilityCheck(
+        text: string, 
+        numberOfQuestions: number = 3,
+        onToastMessage?: (message: string, type: 'success' | 'error' | 'info') => void
+    ): Promise<AIGeneratedQuestions> {
+        try {
+            // Afficher un toast informatif
+            if (onToastMessage) {
+                onToastMessage('Vérification de la disponibilité de l\'IA...', 'info');
+            }
+
+            // Vérifier la disponibilité d'OpenRouter
+            const availability = await AIService.checkOpenRouterAvailability();
+            
+            if (!availability.isAvailable) {
+                const errorMessage = availability.error || 'OpenRouter n\'est pas disponible';
+                if (onToastMessage) {
+                    onToastMessage(errorMessage, 'error');
+                }
+                return {
+                    questions: [],
+                    error: errorMessage
+                };
+            }
+
+            // Si disponible, afficher un toast de succès et lancer la génération
+            if (onToastMessage) {
+                onToastMessage('IA disponible ! Génération des questions...', 'success');
+            }
+
+            // Générer les questions
+            return await AIService.generateQuestionsFromText(text, numberOfQuestions);
+
         } catch {
-            // If there is an error (for example, network error), we return false
-            return false;
+            const errorMessage = 'Erreur lors de la vérification et génération';
+            if (onToastMessage) {
+                onToastMessage(errorMessage, 'error');
+            }
+            return {
+                questions: [],
+                error: errorMessage
+            };
         }
     }
 
@@ -139,4 +226,4 @@ class AIService {
 }
 
 export default AIService;
-export type { AIQuestionResponse, AIGeneratedQuestions };
+export type { AIQuestionResponse, AIGeneratedQuestions, AvailabilityResponse };

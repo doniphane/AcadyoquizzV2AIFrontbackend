@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { Loader2, ArrowLeft } from 'lucide-react';
@@ -8,20 +8,45 @@ import type {
   ParticipantData, 
   Question, 
   UserAnswers, 
-  QuizSubmissionData,
-  ApiQuestionData,
-  ApiAnswerData
+  QuizSubmissionData
 } from '@/types/TakeQuizPage';
 
 import AuthService from '../services/AuthService';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-// Hook API pour TakeQuiz
-const useQuizApi = () => {
+// Interface pour les données de l'API (pour éviter le type 'any')
+interface ApiQuestion {
+  id: number;
+  texte: string;
+  numeroOrdre: number;
+  reponses: Array<{
+    id: number;
+    texte: string;
+    numeroOrdre: number;
+    estCorrecte: boolean;
+  }>;
+}
+
+function TakeQuizPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   
-  const getToken = useCallback(() => {
+  // Récupération des données depuis la navigation
+  const { participantData, quizInfo } = (location.state as { 
+    participantData?: ParticipantData; 
+    quizInfo?: QuizInfo 
+  }) || {};
+
+  // États pour gérer le quiz
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [userAnswers, setUserAnswers] = useState<UserAnswers>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fonction pour obtenir le token d'authentification
+  const getAuthToken = (): string | null => {
     const token = AuthService.getToken();
     if (!token) {
       toast.error('Vous devez être connecté pour participer à un quiz');
@@ -29,10 +54,11 @@ const useQuizApi = () => {
       return null;
     }
     return token;
-  }, [navigate]);
+  };
 
-  const apiCall = useCallback(async (endpoint: string, options?: RequestInit) => {
-    const token = getToken();
+  // Fonction pour faire un appel API
+  const makeApiCall = async (endpoint: string, options?: RequestInit) => {
+    const token = getAuthToken();
     if (!token) return null;
 
     try {
@@ -45,25 +71,18 @@ const useQuizApi = () => {
         ...options
       });
       
-      if (!response.ok) throw new Error(`Erreur ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`Erreur ${response.status}`);
+      }
       return await response.json();
     } catch (error) {
       console.error(`Erreur API ${endpoint}:`, error);
       throw error;
     }
-  }, [getToken]);
+  };
 
-  return { apiCall };
-};
-
-// Hook pour charger les données du quiz
-const useQuizData = (quizInfo: QuizInfo | undefined) => {
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const { apiCall } = useQuizApi();
-  const navigate = useNavigate();
-
-  const loadQuestions = useCallback(async () => {
+  // Fonction pour charger les questions du quiz
+  const loadQuizQuestions = async () => {
     if (!quizInfo) {
       navigate('/student');
       return;
@@ -71,27 +90,20 @@ const useQuizData = (quizInfo: QuizInfo | undefined) => {
 
     try {
       setIsLoading(true);
-      const quizData = await apiCall(`/api/public/questionnaires/${quizInfo.id}`);
-      if (!quizData) return;
-
-      // Debug temporaire pour voir les données
-      console.log('Données reçues de l\'API:', quizData);
-      if (quizData.questions) {
-        console.log('Questions reçues:', quizData.questions);
-        quizData.questions.forEach((q: any, index: number) => {
-          console.log(`Question ${index + 1}:`, q);
-          if (q.reponses) {
-            console.log(`  Réponses de la question ${index + 1}:`, q.reponses);
-          }
-        });
+      const quizData = await makeApiCall(`/api/public/questionnaires/${quizInfo.id}`);
+      
+      if (!quizData || !quizData.questions) {
+        toast.error('Aucune question trouvée pour ce quiz');
+        navigate('/student');
+        return;
       }
 
-      // Transformer les données en une seule étape
-      const transformedQuestions: Question[] = (quizData.questions || []).map((questionData: ApiQuestionData) => ({
+      // Transformation des données de l'API en format Question
+      const transformedQuestions: Question[] = quizData.questions.map((questionData: ApiQuestion) => ({
         id: questionData.id,
         text: questionData.texte,
         orderNumber: questionData.numeroOrdre,
-        answers: questionData.reponses.map((answerData: ApiAnswerData) => ({
+        answers: questionData.reponses.map((answerData) => ({
           id: answerData.id,
           text: answerData.texte,
           orderNumber: answerData.numeroOrdre,
@@ -106,89 +118,51 @@ const useQuizData = (quizInfo: QuizInfo | undefined) => {
     } finally {
       setIsLoading(false);
     }
-  }, [quizInfo, apiCall, navigate]);
+  };
 
-  useEffect(() => {
-    loadQuestions();
-  }, [loadQuestions]);
-
-  return { questions, isLoading };
-};
-
-// Hook pour la navigation dans le quiz
-const useQuizNavigation = (questions: Question[]) => {
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [userAnswers, setUserAnswers] = useState<UserAnswers>({});
-
-  // Fonction pour détecter si une question a plusieurs réponses correctes
-  const isMultipleChoiceQuestion = useCallback((question: Question): boolean => {
+  // Fonction pour vérifier si une question a plusieurs réponses correctes
+  const isMultipleChoiceQuestion = (question: Question): boolean => {
     const correctAnswers = question.answers.filter(answer => answer.isCorrect);
-    const isMultiple = correctAnswers.length > 1;
-    
-    return isMultiple;
-  }, []);
+    return correctAnswers.length > 1;
+  };
 
-  const handleAnswerSelect = useCallback((questionId: number, answerId: number) => {
-    setUserAnswers(prev => {
-      const currentAnswers = prev[questionId];
+  // Fonction pour gérer la sélection d'une réponse
+  const handleAnswerSelect = (questionId: number, answerId: number) => {
+    setUserAnswers(prevAnswers => {
+      const currentAnswers = prevAnswers[questionId];
       const question = questions.find(q => q.id === questionId);
       
-      if (!question) return prev;
+      if (!question) return prevAnswers;
 
       // Si c'est une question à choix multiples
       if (isMultipleChoiceQuestion(question)) {
         const currentArray = Array.isArray(currentAnswers) ? currentAnswers : [];
         const newAnswers = currentArray.includes(answerId)
-          ? currentArray.filter(id => id !== answerId)
-          : [...currentArray, answerId];
-        return { ...prev, [questionId]: newAnswers };
+          ? currentArray.filter(id => id !== answerId) // Désélectionner
+          : [...currentArray, answerId]; // Sélectionner
+        return { ...prevAnswers, [questionId]: newAnswers };
       }
       
       // Si c'est une question à choix unique
-      return { ...prev, [questionId]: answerId };
+      return { ...prevAnswers, [questionId]: answerId };
     });
-  }, [questions, isMultipleChoiceQuestion]);
+  };
 
-  const handleNextQuestion = useCallback(() => {
+  // Fonction pour passer à la question suivante
+  const goToNextQuestion = () => {
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
     }
-  }, [currentQuestionIndex, questions.length]);
-
-  const progressPercentage = useMemo(() => 
-    questions.length > 0 ? ((currentQuestionIndex + 1) / questions.length) * 100 : 0
-  , [currentQuestionIndex, questions.length]);
-
-  const isComplete = useMemo(() => 
-    Object.keys(userAnswers).length === questions.length
-  , [userAnswers, questions.length]);
-
-  const currentQuestion = questions[currentQuestionIndex];
-
-  return {
-    currentQuestionIndex,
-    currentQuestion,
-    userAnswers,
-    progressPercentage,
-    isComplete,
-    handleAnswerSelect,
-    handleNextQuestion,
-    isMultipleChoiceQuestion
   };
-};
 
-// Hook pour la soumission du quiz
-const useQuizSubmission = () => {
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { apiCall } = useQuizApi();
-  const navigate = useNavigate();
+  // Fonction pour soumettre le quiz
+  const submitQuiz = async () => {
+    if (!quizInfo || !participantData) {
+      toast.error('Données manquantes pour soumettre le quiz');
+      return;
+    }
 
-  const submitQuiz = useCallback(async (
-    quizInfo: QuizInfo, 
-    participantData: ParticipantData, 
-    userAnswers: UserAnswers,
-    questions: Question[]
-  ) => {
+    // Vérifier que toutes les questions ont été répondues
     if (Object.keys(userAnswers).length < questions.length) {
       toast.error(`Veuillez répondre à toutes les questions. ${Object.keys(userAnswers).length}/${questions.length} réponses`);
       return;
@@ -197,24 +171,28 @@ const useQuizSubmission = () => {
     setIsSubmitting(true);
 
     try {
-      // Format des réponses pour supporter les choix multiples
-      const formattedAnswers = Object.entries(userAnswers).map(([questionId, answerIdOrIds]) => {
+      // Préparer les réponses pour l'API
+      const formattedAnswers: Array<{questionId: number, answerId: number}> = [];
+      
+      Object.entries(userAnswers).forEach(([questionId, answerIdOrIds]) => {
         const questionIdNum = parseInt(questionId);
         
-        // Si c'est un tableau (choix multiples), créer une entrée pour chaque réponse
+        // Si c'est un tableau (choix multiples)
         if (Array.isArray(answerIdOrIds)) {
-          return answerIdOrIds.map(answerId => ({
+          answerIdOrIds.forEach(answerId => {
+            formattedAnswers.push({
+              questionId: questionIdNum,
+              answerId: answerId
+            });
+          });
+        } else {
+          // Si c'est un nombre (choix unique)
+          formattedAnswers.push({
             questionId: questionIdNum,
-            answerId: answerId
-          }));
+            answerId: answerIdOrIds as number
+          });
         }
-        
-        // Si c'est un nombre (choix unique)
-        return [{
-          questionId: questionIdNum,
-          answerId: answerIdOrIds as number
-        }];
-      }).flat(); // Aplatir le tableau
+      });
 
       const submissionData: QuizSubmissionData = {
         participantFirstName: participantData.firstName,
@@ -222,7 +200,7 @@ const useQuizSubmission = () => {
         answers: formattedAnswers
       };
 
-      const results = await apiCall(`/api/public/questionnaires/${quizInfo.id}/submit`, {
+      const results = await makeApiCall(`/api/public/questionnaires/${quizInfo.id}/submit`, {
         method: 'POST',
         body: JSON.stringify(submissionData)
       });
@@ -243,29 +221,28 @@ const useQuizSubmission = () => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [apiCall, navigate]);
+  };
 
-  return { isSubmitting, submitQuiz };
-};
+  // Fonction pour gérer le bouton Suivant/Terminer
+  const handleNextButton = async () => {
+    if (currentQuestionIndex === questions.length - 1) {
+      // Dernière question, soumettre le quiz
+      await submitQuiz();
+    } else {
+      // Question suivante
+      goToNextQuestion();
+    }
+  };
 
-function TakeQuizPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { participantData, quizInfo } = (location.state as { participantData?: ParticipantData; quizInfo?: QuizInfo }) || {};
+  // Fonction pour retourner à la page étudiant
+  const handleBackToStudent = () => {
+    navigate('/student');
+  };
 
-  // Hooks doivent être appelés avant les early returns
-  const { questions, isLoading } = useQuizData(quizInfo || undefined);
-  const {
-    currentQuestionIndex,
-    currentQuestion,
-    userAnswers,
-    progressPercentage,
-    isComplete,
-    handleAnswerSelect,
-    handleNextQuestion,
-    isMultipleChoiceQuestion
-  } = useQuizNavigation(questions);
-  const { isSubmitting, submitQuiz } = useQuizSubmission();
+  // Charger les questions au montage du composant
+  useEffect(() => {
+    loadQuizQuestions();
+  }, []);
 
   // Rediriger si pas de données
   useEffect(() => {
@@ -274,24 +251,14 @@ function TakeQuizPage() {
     }
   }, [participantData, quizInfo, navigate]);
 
-  // Fonctions de navigation
-  const handleBack = useCallback(() => {
-    navigate('/student');
-  }, [navigate]);
+  // Calculs pour l'interface
+  const progressPercentage = questions.length > 0 
+    ? ((currentQuestionIndex + 1) / questions.length) * 100 
+    : 0;
 
-  const handleNext = useCallback(async () => {
-    if (currentQuestionIndex === questions.length - 1) {
-      // Dernière question, soumettre le quiz
-      if (quizInfo && participantData) {
-        await submitQuiz(quizInfo, participantData, userAnswers, questions);
-      }
-    } else {
-      // Question suivante
-      handleNextQuestion();
-    }
-  }, [currentQuestionIndex, questions.length, submitQuiz, quizInfo, participantData, userAnswers, handleNextQuestion]);
-
+  const isComplete = Object.keys(userAnswers).length === questions.length;
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
+  const currentQuestion = questions[currentQuestionIndex];
   const canProceed = currentQuestion && userAnswers[currentQuestion.id] !== undefined;
 
   // Affichage de chargement
@@ -312,7 +279,7 @@ function TakeQuizPage() {
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Données manquantes</h1>
-          <Button onClick={() => navigate('/student')} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900">
+          <Button onClick={handleBackToStudent} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900">
             Retour à l'accueil
           </Button>
         </div>
@@ -326,7 +293,7 @@ function TakeQuizPage() {
       <div className="min-h-screen bg-gray-900 text-white p-6">
         <div className="max-w-4xl mx-auto text-center">
           <div className="text-xl mb-4">Aucune question disponible pour ce quiz.</div>
-          <Button onClick={handleBack} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900">
+          <Button onClick={handleBackToStudent} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Retour
           </Button>
@@ -337,14 +304,14 @@ function TakeQuizPage() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-6">
-      {/* Header avec progression */}
+      {/* En-tête avec progression */}
       <div className="max-w-4xl mx-auto mb-6">
         <div className="flex justify-between items-center mb-4">
           <h1 className="text-3xl font-bold text-yellow-400">
             Question {currentQuestionIndex + 1}/{questions.length}
           </h1>
           <div className="text-white text-lg">
-            {participantData?.firstName} {participantData?.lastName}
+            {participantData.firstName} {participantData.lastName}
           </div>
         </div>
 
@@ -395,11 +362,14 @@ function TakeQuizPage() {
                   const currentAnswers = userAnswers[currentQuestion.id];
                   
                   // Déterminer si cette réponse est sélectionnée
-                  const isSelected = isMultipleChoice 
-                    ? Array.isArray(currentAnswers) 
-                      ? currentAnswers.includes(answer.id)
-                      : false
-                    : currentAnswers === answer.id;
+                  let isSelected = false;
+                  if (isMultipleChoice) {
+                    if (Array.isArray(currentAnswers)) {
+                      isSelected = currentAnswers.includes(answer.id);
+                    }
+                  } else {
+                    isSelected = currentAnswers === answer.id;
+                  }
 
                   return (
                     <div key={answer.id} className="flex items-center">
@@ -428,7 +398,7 @@ function TakeQuizPage() {
         {/* Bouton Suivant/Terminer */}
         <div className="flex justify-end mt-6">
           <Button
-            onClick={handleNext}
+            onClick={handleNextButton}
             disabled={!canProceed || (isLastQuestion && (!isComplete || isSubmitting))}
             className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold"
           >

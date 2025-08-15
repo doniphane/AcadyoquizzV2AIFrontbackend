@@ -1,7 +1,6 @@
-// Composant de page Student
 
-import { useState } from 'react';
-import type { FormEvent, ChangeEvent } from 'react';
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import type { AxiosError } from 'axios';
@@ -15,219 +14,212 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 // Import des icônes Lucide React
 import { LogOut, AlertCircle, User, BookOpen, History, Menu, X } from 'lucide-react';
 
-// Import du service d'authentification
+// Import du service d'authentification et du store
 import AuthService from '../services/AuthService';
+import { useAuth } from '../store/authStore';
 
-
-// Interface pour les données du participant
-interface ParticipantData {
+// Interface pour les données du formulaire
+interface StudentFormData {
     firstName: string;
     lastName: string;
     quizCode: string;
-}
-
-// Interface pour les erreurs de validation
-interface ValidationErrors {
-    firstName?: string;
-    lastName?: string;
-    quizCode?: string;
 }
 
 // Interface pour les informations du quiz
 interface QuizInfo {
     id: number;
-    titre: string; // Correspond au champ 'titre' de l'API Symfony
+    titre: string;
     description?: string;
-    estActif: boolean; // Correspond au champ 'estActif' de l'API Symfony
-    estDemarre: boolean; // Correspond au champ 'estDemarre' de l'API Symfony
-    codeAcces: string; // Correspond au champ 'codeAcces' de l'API Symfony
-    scorePassage?: number; // Correspond au champ 'scorePassage' de l'API Symfony
+    estActif: boolean;
+    estDemarre: boolean;
+    codeAcces: string;
+    scorePassage?: number;
     questions?: unknown[];
 }
 
-// Interface pour les données sanitisées à envoyer
-interface SanitizedParticipantData {
-    firstName: string;
-    lastName: string;
-    quizCode: string;
-}
-
-// Interface pour les props du composant ErrorMessage
-interface ErrorMessageProps {
-    error?: string;
-}
-
-
-// Utilitaires de validation et sécurité
-const ValidationUtils = {
-    // Nettoie une chaîne de caractères dangereux
-    sanitizeInput: (input: string): string => {
-        return input
-            .trim()
-            .replace(/[<>"'&]/g, '') // Supprime les caractères dangereux pour XSS
-            .replace(/\s+/g, ' '); // Normalise les espaces
-    },
-
-    // Valide un nom (prénom/nom)
-    validateName: (name: string): string | null => {
-        const sanitized: string = ValidationUtils.sanitizeInput(name);
-
-        if (!sanitized) {
-            return 'Ce champ est obligatoire';
-        }
-
-        if (sanitized.length < 2) {
-            return 'Minimum 2 caractères requis';
-        }
-
-        if (sanitized.length > 50) {
-            return 'Maximum 50 caractères autorisés';
-        }
-
-        // Regex stricte : lettres, espaces, tirets, apostrophes uniquement
-        const nameRegex: RegExp = /^[a-zA-ZÀ-ÿ\s\-'.]+$/;
-        if (!nameRegex.test(sanitized)) {
-            return 'Seules les lettres, espaces, tirets et apostrophes sont autorisés';
-        }
-
-        // Vérifier qu'il n'y a pas que des espaces/caractères spéciaux
-        if (!/[a-zA-ZÀ-ÿ]/.test(sanitized)) {
-            return 'Le nom doit contenir au moins une lettre';
-        }
-
-        return null;
-    },
-
-    // Valide le code du quiz
-    validateQuizCode: (code: string): string | null => {
-        const sanitized: string = code.trim().toUpperCase();
-
-        if (!sanitized) {
-            return 'Le code du quiz est obligatoire';
-        }
-
-        if (sanitized.length !== 6) {
-            return 'Le code doit contenir exactement 6 caractères';
-        }
-
-        // Regex stricte : lettres majuscules et chiffres uniquement
-        const codeRegex: RegExp = /^[A-Z0-9]{6}$/;
-        if (!codeRegex.test(sanitized)) {
-            return 'Le code ne peut contenir que des lettres majuscules et des chiffres';
-        }
-
-        return null;
-    },
-
-    // Échappe les caractères HTML pour éviter XSS
-    escapeHtml: (text: string): string => {
-        const div: HTMLDivElement = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-};
-
-
-// URL de base de l'API Symfony
+// URL de base de l'API
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL;
 
-function StudentPage() {
-    // Hook pour la navigation entre les pages
-    const navigate = useNavigate();
+// =============================================================================
+// COMPOSANTS D'INTERFACE
+// =============================================================================
 
-    // État pour les données du participant
-    const [participantData, setParticipantData] = useState<ParticipantData>({
-        firstName: '',
-        lastName: '',
-        quizCode: ''
+// Composant pour le champ de formulaire
+function FormField({ 
+    label, 
+    id, 
+    type, 
+    placeholder, 
+    autoComplete, 
+    error, 
+    disabled, 
+    register,
+    fieldName,
+    validation,
+    maxLength,
+    className = ""
+}: {
+    label: string;
+    id: string;
+    type: string;
+    placeholder: string;
+    autoComplete: string;
+    error: { message?: string } | undefined;
+    disabled: boolean;
+    register: unknown;
+    fieldName: string;
+    validation: object;
+    maxLength?: number;
+    className?: string;
+}) {
+    return (
+        <div>
+            <Label htmlFor={id} className="text-sm font-medium">
+                {label}
+            </Label>
+            <Input
+                id={id}
+                type={type}
+                autoComplete={autoComplete}
+                placeholder={placeholder}
+                disabled={disabled}
+                maxLength={maxLength}
+                className={`mt-1 border-black border-2 ${error ? 'border-red-500' : ''} ${className}`}
+                {...(register as (name: string, options?: object) => object)(fieldName, validation)}
+            />
+            {error && (
+                <div className="flex items-center mt-1 text-red-600 text-sm">
+                    <AlertCircle className="w-4 h-4 mr-1" />
+                    <span>{error.message}</span>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// Composant pour le bouton de soumission
+function SubmitButton({ isDisabled, isLoading }: { isDisabled: boolean; isLoading: boolean }) {
+    return (
+        <Button
+            type="submit"
+            className="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold py-3 text-lg disabled:opacity-50"
+            disabled={isDisabled || isLoading}
+        >
+            {isLoading ? 'Vérification...' : 'Commencer le quiz'}
+        </Button>
+    );
+}
+
+// =============================================================================
+// COMPOSANT PRINCIPAL
+// =============================================================================
+
+function StudentPage() {
+    const navigate = useNavigate();
+    
+    // Récupérer les données de l'utilisateur connecté
+    const { user } = useAuth();
+
+    // Configuration de React Hook Form - SIMPLIFIÉE
+    const {
+        register,
+        handleSubmit,
+        formState: { errors, isSubmitting },
+        setError,
+        clearErrors,
+        setValue
+    } = useForm<StudentFormData>({
+        defaultValues: { firstName: '', lastName: '', quizCode: '' }
     });
 
-    // État pour les erreurs de validation
-    const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
-
-    // État pour stocker les informations du quiz (utilisé dans la navigation)
-    const [, setQuizInfo] = useState<QuizInfo | null>(null);
-
-    // État pour indiquer si on cherche le quiz
+    // État pour le chargement
     const [isLoading, setIsLoading] = useState<boolean>(false);
 
-    // État pour l'erreur générale
-    const [generalError, setGeneralError] = useState<string>('');
-
-    // État pour gérer l'ouverture du menu mobile
+    // État pour le menu mobile
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-    // Fonction pour valider un champ spécifique
-    const validateField = (field: keyof ParticipantData, value: string): string | null => {
-        switch (field) {
-            case 'firstName':
-                return ValidationUtils.validateName(value);
-            case 'lastName':
-                return ValidationUtils.validateName(value);
-            case 'quizCode':
-                return ValidationUtils.validateQuizCode(value);
-            default:
-                return null;
-        }
-    };
-
-    const handleInputChange = (field: keyof ParticipantData, value: string): void => {
-        // Limiter la longueur maximale par sécurité
-        const maxLengths = {
-            firstName: 50,
-            lastName: 50,
-            quizCode: 6
-        };
-
-        if (value.length > maxLengths[field]) {
-            return; // Ignore les caractères supplémentaires
-        }
-
-        // Sanitiser l'entrée
-        let sanitizedValue: string = value;
-        if (field === 'quizCode') {
-            sanitizedValue = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-        } else {
-            // Pour les noms, permettre seulement les caractères autorisés
-            sanitizedValue = value.replace(/[^a-zA-ZÀ-ÿ\s\-'.]/g, '');
-        }
-
-        // Mettre à jour les données
-        setParticipantData((prev: ParticipantData) => ({
-            ...prev,
-            [field]: sanitizedValue
-        }));
-
-        // Valider le champ et mettre à jour les erreurs
-        const error: string | null = validateField(field, sanitizedValue);
-        setValidationErrors((prev: ValidationErrors) => ({
-            ...prev,
-            [field]: error || undefined
-        }));
-
-        // Effacer l'erreur générale si l'utilisateur modifie les champs
-        if (generalError) {
-            setGeneralError('');
-        }
-    };
-
-    // Fonction pour valider tout le formulaire
-    const validateForm = (): boolean => {
-        const errors: ValidationErrors = {};
-        let isValid: boolean = true;
-
-        // Valider chaque champ
-        Object.keys(participantData).forEach((key: string) => {
-            const field = key as keyof ParticipantData;
-            const error: string | null = validateField(field, participantData[field]);
-            if (error) {
-                errors[field] = error;
-                isValid = false;
+    // Pré-remplir les champs avec les données de l'utilisateur connecté
+    useEffect(() => {
+        if (user && user.id) {
+            // Utiliser les champs prenom/nom du type User
+            const firstName = user.prenom || '';
+            const lastName = user.nom || '';
+            
+            // Vérifier si les champs ne sont pas déjà remplis
+            if (firstName || lastName) {
+                setValue('firstName', firstName);
+                setValue('lastName', lastName);
             }
-        });
+        }
+    }, [user, setValue]);
 
-        setValidationErrors(errors);
-        return isValid;
+    // Fonction de soumission simplifiée
+    const onSubmit = async (data: StudentFormData): Promise<void> => {
+        clearErrors();
+        setIsLoading(true);
+
+        try {
+            // Récupérer le token d'authentification
+            const token = AuthService.getToken();
+            if (!token) {
+                setError('quizCode', { type: 'manual', message: 'Vous devez être connecté pour participer à un quiz' });
+                return;
+            }
+
+            // Appeler l'API pour vérifier le code du quiz
+            const response = await axios.get<QuizInfo>(`${API_BASE_URL}/api/public/questionnaires/code/${data.quizCode.toUpperCase()}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            const quizData: QuizInfo = response.data;
+
+            // Vérifier que le quiz est actif
+            if (!quizData.estActif) {
+                setError('quizCode', { type: 'manual', message: 'Ce quiz n\'est pas actif pour le moment' });
+                return;
+            }
+
+            // Navigation vers la page du quiz
+            navigate('/take-quiz', {
+                state: {
+                    participantData: {
+                        firstName: data.firstName.trim(),
+                        lastName: data.lastName.trim(),
+                        quizCode: data.quizCode.toUpperCase()
+                    },
+                    quizInfo: quizData
+                }
+            });
+
+        } catch (error) {
+            // Gérer les erreurs de l'API
+            const axiosError = error as AxiosError;
+            if (axiosError.response) {
+                const status: number = axiosError.response.status;
+                let message = '';
+                
+                switch (status) {
+                    case 404:
+                        message = 'Code de quiz invalide ou quiz non trouvé';
+                        break;
+                    case 403:
+                        message = 'Accès refusé à ce quiz';
+                        break;
+                    case 429:
+                        message = 'Trop de tentatives. Veuillez patienter quelques minutes';
+                        break;
+                    default:
+                        message = 'Erreur lors de la vérification du code. Veuillez réessayer';
+                }
+                
+                setError('quizCode', { type: 'manual', message });
+            } else {
+                setError('quizCode', { type: 'manual', message: 'Erreur lors de la vérification du code. Veuillez réessayer' });
+            }
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     // Fonction pour gérer la déconnexion
@@ -241,110 +233,9 @@ function StudentPage() {
         }
     };
 
-    // Fonction pour gérer la soumission du formulaire
-    const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-        event.preventDefault();
-        setGeneralError('');
-
-        // Validation complète du formulaire
-        if (!validateForm()) {
-            setGeneralError('Veuillez corriger les erreurs dans le formulaire');
-            return;
-        }
-
-        setIsLoading(true);
-
-        try {
-            // Sanitiser les données avant l'envoi
-            const sanitizedData: SanitizedParticipantData = {
-                firstName: ValidationUtils.sanitizeInput(participantData.firstName),
-                lastName: ValidationUtils.sanitizeInput(participantData.lastName),
-                quizCode: participantData.quizCode.trim().toUpperCase()
-            };
-
-            // Récupérer le token d'authentification
-            const token = AuthService.getToken();
-            if (!token) {
-                setGeneralError('Vous devez être connecté pour participer à un quiz');
-                return;
-            }
-
-            // Appeler l'API pour vérifier le code du quiz avec authentification
-            const response = await axios.get<QuizInfo>(`${API_BASE_URL}/api/public/questionnaires/code/${sanitizedData.quizCode}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-            const quizData: QuizInfo = response.data;
-
-            // Vérifier que le quiz est actif
-            if (!quizData.estActif) {
-                setGeneralError('Ce quiz n\'est pas actif pour le moment');
-                return;
-            }
-
-            // Stocker les informations du quiz (pour utilisation future)
-            setQuizInfo(quizData);
-
-            // Navigation vers la page du quiz avec les données sanitisées
-            navigate('/take-quiz', {
-                state: {
-                    participantData: sanitizedData,
-                    quizInfo: quizData
-                }
-            });
-
-        } catch (error) {
-            // Gérer les erreurs de l'API de manière sécurisée
-            const axiosError = error as AxiosError;
-            if (axiosError.response) {
-                const status: number = axiosError.response.status;
-                if (status === 404) {
-                    setGeneralError('Code de quiz invalide ou quiz non trouvé');
-                } else if (status === 403) {
-                    setGeneralError('Accès refusé à ce quiz');
-                } else if (status === 429) {
-                    setGeneralError('Trop de tentatives. Veuillez patienter quelques minutes');
-                } else {
-                    setGeneralError('Erreur lors de la vérification du code. Veuillez réessayer');
-                }
-            } else {
-                setGeneralError('Erreur lors de la vérification du code. Veuillez réessayer');
-                console.error('Quiz verification error:', error);
-            }
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // Fonction pour gérer les changements d'input avec types
-    const handleFirstNameChange = (e: ChangeEvent<HTMLInputElement>): void => {
-        handleInputChange('firstName', e.target.value);
-    };
-
-    const handleLastNameChange = (e: ChangeEvent<HTMLInputElement>): void => {
-        handleInputChange('lastName', e.target.value);
-    };
-
-    const handleQuizCodeChange = (e: ChangeEvent<HTMLInputElement>): void => {
-        handleInputChange('quizCode', e.target.value);
-    };
-
     // Fonction pour naviguer vers l'historique
     const handleNavigateToHistory = (): void => {
         navigate('/student-history');
-    };
-
-    // Composant pour afficher les erreurs
-    const ErrorMessage = ({ error }: ErrorMessageProps) => {
-        if (!error) return null;
-
-        return (
-            <div className="flex items-center mt-1 text-red-600 text-sm">
-                <AlertCircle className="w-4 h-4 mr-1" />
-                <span>{ValidationUtils.escapeHtml(error)}</span>
-            </div>
-        );
     };
 
     // Fonction pour basculer le menu mobile
@@ -362,7 +253,7 @@ function StudentPage() {
                         Espace Élève
                     </h1>
                     <p className="text-gray-300 text-lg">
-                        Bonjour Étudiant !
+                        Bonjour {user?.prenom || 'Étudiant'} !
                     </p>
                 </div>
 
@@ -424,46 +315,69 @@ function StudentPage() {
                             <User className="w-5 h-5 mr-2" />
                             Vos Informations
                         </CardTitle>
+                        <p className="text-sm text-gray-600">
+                            Vos informations sont pré-remplies depuis votre profil
+                        </p>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* Champ Prénom */}
-                            <div>
-                                <Label htmlFor="first_name" className="text-sm font-medium ">
-                                    Prénom
-                                </Label>
-                                <Input
-                                    id="first_name"
-                                    name="first_name"
-                                    type="text"
-                                    value={participantData.firstName}
-                                    onChange={handleFirstNameChange}
-                                    className={`mt-1 border-black border-2 ${validationErrors.firstName ? 'border-red-500' : ''}`}
-                                    placeholder="Prénom"
-                                    maxLength={50}
-                                    autoComplete="given-name"
-                                />
-                                <ErrorMessage error={validationErrors.firstName} />
-                            </div>
+                            <FormField
+                                label="Prénom"
+                                id="first_name"
+                                type="text"
+                                placeholder="Prénom"
+                                autoComplete="given-name"
+                                error={errors.firstName}
+                                disabled={isSubmitting || isLoading}
+                                register={register}
+                                fieldName="firstName"
+                                validation={{
+                                    required: 'Prénom requis',
+                                    minLength: {
+                                        value: 2,
+                                        message: 'Minimum 2 caractères'
+                                    },
+                                    maxLength: {
+                                        value: 50,
+                                        message: 'Maximum 50 caractères'
+                                    },
+                                    pattern: {
+                                        value: /^[a-zA-ZÀ-ÿ\s\-'.]+$/,
+                                        message: 'Seules les lettres, espaces, tirets et apostrophes sont autorisés'
+                                    }
+                                }}
+                                maxLength={50}
+                            />
 
                             {/* Champ Nom */}
-                            <div>
-                                <Label htmlFor="last_name" className="text-sm font-medium">
-                                    Nom
-                                </Label>
-                                <Input
-                                    id="last_name"
-                                    name="last_name"
-                                    type="text"
-                                    value={participantData.lastName}
-                                    onChange={handleLastNameChange}
-                                    className={`mt-1 border-black border-2 ${validationErrors.lastName ? 'border-red-500' : ''}`}
-                                    placeholder="Nom"
-                                    maxLength={50}
-                                    autoComplete="family-name"
-                                />
-                                <ErrorMessage error={validationErrors.lastName} />
-                            </div>
+                            <FormField
+                                label="Nom"
+                                id="last_name"
+                                type="text"
+                                placeholder="Nom"
+                                autoComplete="family-name"
+                                error={errors.lastName}
+                                disabled={isSubmitting || isLoading}
+                                register={register}
+                                fieldName="lastName"
+                                validation={{
+                                    required: 'Nom requis',
+                                    minLength: {
+                                        value: 2,
+                                        message: 'Minimum 2 caractères'
+                                    },
+                                    maxLength: {
+                                        value: 50,
+                                        message: 'Maximum 50 caractères'
+                                    },
+                                    pattern: {
+                                        value: /^[a-zA-ZÀ-ÿ\s\-'.]+$/,
+                                        message: 'Seules les lettres, espaces, tirets et apostrophes sont autorisés'
+                                    }
+                                }}
+                                maxLength={50}
+                            />
                         </div>
                     </CardContent>
                 </Card>
@@ -480,48 +394,44 @@ function StudentPage() {
                         </p>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {/* Erreur générale */}
-                        {generalError && (
-                            <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-                                <div className="flex items-center">
-                                    <AlertCircle className="w-4 h-4 mr-2" />
-                                    <span>{ValidationUtils.escapeHtml(generalError)}</span>
-                                </div>
-                            </div>
-                        )}
-
-                        <form onSubmit={handleSubmit} noValidate>
+                        <form onSubmit={handleSubmit(onSubmit)} noValidate>
                             {/* Champ Code du Quiz */}
                             <div className="mb-4">
-                                <Label htmlFor="quiz_code" className="text-sm font-medium">
-                                    Code du Quiz <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
+                                <FormField
+                                    label="Code du Quiz *"
                                     id="quiz_code"
-                                    name="quiz_code"
                                     type="text"
-                                    value={participantData.quizCode}
-                                    onChange={handleQuizCodeChange}
-                                    placeholder="Entrez le code du quizz"
-                                    className={`mt-1 uppercase border-black border-2 ${validationErrors.quizCode ? 'border-red-500' : ''}`}
-                                    maxLength={6}
-                                    style={{ textTransform: 'uppercase' }}
+                                    placeholder="Entrez le code du quiz"
                                     autoComplete="off"
+                                    error={errors.quizCode}
+                                    disabled={isSubmitting || isLoading}
+                                    register={register}
+                                    fieldName="quizCode"
+                                    validation={{
+                                        required: 'Code du quiz requis',
+                                        minLength: {
+                                            value: 6,
+                                            message: 'Le code doit contenir exactement 6 caractères'
+                                        },
+                                        maxLength: {
+                                            value: 6,
+                                            message: 'Le code doit contenir exactement 6 caractères'
+                                        },
+                                        pattern: {
+                                            value: /^[A-Z0-9]{6}$/,
+                                            message: 'Le code ne peut contenir que des lettres majuscules et des chiffres'
+                                        }
+                                    }}
+                                    maxLength={6}
+                                    className="uppercase"
                                 />
                                 <div className="text-xs text-gray-500 mt-1">
                                     Code à 6 caractères fourni par votre professeur
                                 </div>
-                                <ErrorMessage error={validationErrors.quizCode} />
                             </div>
 
                             {/* Bouton Commencer le Quiz */}
-                            <Button
-                                type="submit"
-                                className="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-semibold py-3 text-lg disabled:opacity-50"
-                                disabled={isLoading || Object.keys(validationErrors).some((key: string) => validationErrors[key as keyof ValidationErrors])}
-                            >
-                                {isLoading ? 'Vérification...' : 'Commencer le qizz'}
-                            </Button>
+                            <SubmitButton isDisabled={isSubmitting} isLoading={isLoading} />
                         </form>
                     </CardContent>
                 </Card>
