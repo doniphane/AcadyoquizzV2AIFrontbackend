@@ -1,14 +1,14 @@
 import axios from 'axios';
 import type { AxiosResponse, AxiosError } from 'axios';
 import type { User } from '../types/User';
-
+import Cookies from 'js-cookie';
+import { COOKIE_OPTIONS, COOKIE_REMOVE_OPTIONS, COOKIE_NAMES } from '../utils/cookieConfig';
 
 // Interface pour les credentials de connexion
 interface LoginCredentials {
     username: string;
     password: string;
 }
-
 
 // Interface pour la réponse d'erreur du backend
 interface LoginErrorResponse {
@@ -31,7 +31,7 @@ export interface UserInfo {
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL;
 
 class AuthService {
-    private tokenKey = 'jwt_token';
+    private tokenKey = COOKIE_NAMES.JWT_TOKEN;
 
     constructor() {
         // Configurer axios pour envoyer automatiquement le token
@@ -44,19 +44,19 @@ class AuthService {
         });
     }
 
-    // Récupère le token stocké
+    // Récupère le token depuis les cookies
     public getToken(): string | null {
-        return localStorage.getItem(this.tokenKey);
+        return Cookies.get(this.tokenKey) || null;
     }
 
-    // Stocke le token
+    // Stocke le token dans un cookie sécurisé
     private setToken(token: string): void {
-        localStorage.setItem(this.tokenKey, token);
+        Cookies.set(this.tokenKey, token, COOKIE_OPTIONS);
     }
 
-    // Supprime le token
+    // Supprime le token des cookies
     private removeToken(): void {
-        localStorage.removeItem(this.tokenKey);
+        Cookies.remove(this.tokenKey, COOKIE_REMOVE_OPTIONS);
     }
 
     // Connexion : récupère et stocke le token

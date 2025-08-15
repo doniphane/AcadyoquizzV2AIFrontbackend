@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import type { User } from "../types/User";
 import AuthService from "../services/AuthService";
+import Cookies from 'js-cookie';
+import { COOKIE_OPTIONS, COOKIE_REMOVE_OPTIONS, COOKIE_NAMES } from '../utils/cookieConfig';
 
 export type Auth = {
   user: User | null;
@@ -15,6 +17,19 @@ export type Auth = {
   checkAuth: () => Promise<boolean>;
   clearError: () => void;
   setLoading: (loading: boolean) => void;
+};
+
+// Storage personnalisé pour utiliser les cookies
+const cookieStorage = {
+  getItem: (name: string) => {
+    return Cookies.get(name) || null;
+  },
+  setItem: (name: string, value: string) => {
+    Cookies.set(name, value, COOKIE_OPTIONS);
+  },
+  removeItem: (name: string) => {
+    Cookies.remove(name, COOKIE_REMOVE_OPTIONS);
+  }
 };
 
 export const useAuthStore = create<Auth>()(
@@ -64,8 +79,8 @@ export const useAuthStore = create<Auth>()(
       setLoading: (loading: boolean) => set({ isLoading: loading })
     }),
     {
-      name: "auth-user",
-      storage: createJSONStorage(() => localStorage),
+      name: COOKIE_NAMES.AUTH_USER,
+      storage: createJSONStorage(() => cookieStorage),
       partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated })
     }
   )
