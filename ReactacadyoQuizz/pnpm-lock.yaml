@@ -50,6 +50,9 @@ importers:
       react:
         specifier: ^19.1.1
         version: 19.1.1
+      react-cookie-consent:
+        specifier: ^9.0.0
+        version: 9.0.0(react@19.1.1)
       react-dom:
         specifier: ^19.1.1
         version: 19.1.1(react@19.1.1)
@@ -68,6 +71,9 @@ importers:
       tailwindcss:
         specifier: ^4.1.11
         version: 4.1.11
+      tarteaucitronjs:
+        specifier: ^1.22.0
+        version: 1.22.0
       zod:
         specifier: ^4.0.14
         version: 4.0.14
@@ -1224,6 +1230,9 @@ packages:
     resolution: {integrity: sha512-twQoecYPiVA5K/h6SxtORw/Bs3ar+mLUtoPSc7iMXzQzK8d7eJ/R09wmTwAjiamETn1cXYPGfNnu7DMoHgu12w==}
     hasBin: true
 
+  js-cookie@2.2.1:
+    resolution: {integrity: sha512-HvdH2LzI/EAZcUwA8+0nKNtWHqS+ZmijLA30RwZA0bo7ToCckjK5MkGhjED9KoRcXO6BaGI3I9UIzSA1FKFPOQ==}
+
   js-cookie@3.0.5:
     resolution: {integrity: sha512-cEiJEAEoIbWfCZYKWhVwFuvPX1gETRYPw6LlaTKoxD3s2AkXzkCjnp6h0V77ozyqj0jakteJ4YqDJT830+lVGw==}
     engines: {node: '>=14'}
@@ -1463,6 +1472,12 @@ packages:
   raf@3.4.1:
     resolution: {integrity: sha512-Sq4CW4QhwOHE8ucn6J34MqtZCeWFP2aQSmrlroYgqAV1PjStIhJXxYuTgUIfkEk7zTLjmIjLmU5q+fbD1NnOJA==}
 
+  react-cookie-consent@9.0.0:
+    resolution: {integrity: sha512-Blyj+m+Zz7SFHYqT18p16EANgnSg2sIyU6Yp3vk83AnOnSW7qnehPkUe4+8+qxztJrNmCH5GP+VHsWzAKVOoZA==}
+    engines: {node: '>=10'}
+    peerDependencies:
+      react: '>=16'
+
   react-dom@19.1.1:
     resolution: {integrity: sha512-Dlq/5LAZgF0Gaz6yiqZCf6VCcZs1ghAJyrsu84Q/GT0gV+mCxbfmKNoGRKBYMJ8IEdGPqu49YWXD02GCknEDkw==}
     peerDependencies:
@@ -1585,6 +1600,9 @@ packages:
   tar@7.4.3:
     resolution: {integrity: sha512-5S7Va8hKfV7W5U6g3aYxXmlPoZVAwUMy9AOKyF2fVuZa2UD3qZjg578OrLRt8PcNN1PleVaL/5/yYATNL0ICUw==}
     engines: {node: '>=18'}
+
+  tarteaucitronjs@1.22.0:
+    resolution: {integrity: sha512-F7pmFVa3cOyLi1wTb79Reiy4VfpcwbWUnafO7ABz5KldqSKHEmAcxeqgA7tPS7XcEEjeHRgXAcyotS9fxLVqpg==}
 
   text-segmentation@1.0.3:
     resolution: {integrity: sha512-iOiPUo/BGnZ6+54OsWxZidGCsdU8YbE4PSpdPinp7DeMtUJNJBoJ/ouUSTJjHkh1KntHaltHl/gDs2FC4i5+Nw==}
@@ -2760,6 +2778,8 @@ snapshots:
 
   jiti@2.5.1: {}
 
+  js-cookie@2.2.1: {}
+
   js-cookie@3.0.5: {}
 
   js-tokens@4.0.0: {}
@@ -2956,6 +2976,11 @@ snapshots:
       performance-now: 2.1.0
     optional: true
 
+  react-cookie-consent@9.0.0(react@19.1.1):
+    dependencies:
+      js-cookie: 2.2.1
+      react: 19.1.1
+
   react-dom@19.1.1(react@19.1.1):
     dependencies:
       react: 19.1.1
@@ -3072,6 +3097,8 @@ snapshots:
       minizlib: 3.0.2
       mkdirp: 3.0.1
       yallist: 5.0.0
+
+  tarteaucitronjs@1.22.0: {}
 
   text-segmentation@1.0.3:
     dependencies:

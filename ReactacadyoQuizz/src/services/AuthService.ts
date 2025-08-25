@@ -34,7 +34,7 @@ class AuthService {
     private tokenKey = COOKIE_NAMES.JWT_TOKEN;
 
     constructor() {
-        // Configurer axios pour envoyer automatiquement le token
+       
         axios.interceptors.request.use((config) => {
             const token = this.getToken();
             if (token) {
@@ -44,12 +44,12 @@ class AuthService {
         });
     }
 
-    // Récupère le token depuis les cookies
+
     public getToken(): string | null {
         return Cookies.get(this.tokenKey) || null;
     }
 
-    // Stocke le token dans un cookie sécurisé
+    
     private setToken(token: string): void {
         Cookies.set(this.tokenKey, token, COOKIE_OPTIONS);
     }
@@ -96,7 +96,6 @@ class AuthService {
             const response: AxiosResponse<UserInfo> = await axios.get(`${API_BASE_URL}/api/user/me`);
             const userInfo = response.data;
             
-            // Adapter les données du backend vers le format attendu par le front
             const user: User = {
                 id: userInfo.id,
                 email: userInfo.email,

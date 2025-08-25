@@ -19,7 +19,7 @@ export type Auth = {
   setLoading: (loading: boolean) => void;
 };
 
-// Storage personnalisé pour utiliser les cookies
+
 const cookieStorage = {
   getItem: (name: string) => {
     return Cookies.get(name) || null;
@@ -68,7 +68,7 @@ export const useAuthStore = create<Auth>()(
           set({ user, isAuthenticated: !!user, isLoading: false, error: null });
           return !!user;
         } catch (error) {
-          // Ici, ce ne sont que les vraies erreurs (réseau, serveur, etc.)
+        
           console.error('Erreur lors de la vérification de l\'authentification:', error);
           set({ user: null, isAuthenticated: false, isLoading: false, error: 'Erreur de connexion' });
           return false;

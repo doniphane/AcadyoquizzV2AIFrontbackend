@@ -79,7 +79,7 @@ export interface ApiError {
     detail?: string;
 }
 
-// Type pour les données du formulaire d'ajout de question (sans Zod)
+
 export interface AddQuestionFormData {
     text: string;
     answers: Array<{

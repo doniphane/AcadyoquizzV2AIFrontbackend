@@ -24,12 +24,11 @@ class ApiAuthController extends AbstractController
 {
     public function __construct(
         private JwtCookieService $jwtCookieService
-    ) {
-    }
+    ) {}
 
     /**
      * Point d'entrée pour la connexion
-     * Cette route est gérée par Lexik JWT, on ajoute juste le cookie
+   
      */
     #[Route('/login_check', name: 'api_login_check', methods: ['POST'])]
     public function login(Request $request): JsonResponse
@@ -55,8 +54,4 @@ class ApiAuthController extends AbstractController
 
         return $response;
     }
-
-
-
-
 }

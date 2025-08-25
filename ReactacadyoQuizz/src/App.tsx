@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, Layout, ProtectedRoute } from './components';
 
-// Import de toutes les pages
+
 import {
     LoginPage,
     RegisterPage,
@@ -15,7 +15,7 @@ import {
     StudentHistoryPage
 } from './pages';
 
-// Interface pour définir une route avec ses propriétés
+
 interface AppRoute {
     path: string;
     element: React.ReactNode;
@@ -23,7 +23,7 @@ interface AppRoute {
     description: string;
 }
 
-// Configuration des routes publiques (pas besoin d'authentification)
+
 const publicRoutes: AppRoute[] = [
     {
         path: '/login',
@@ -37,7 +37,7 @@ const publicRoutes: AppRoute[] = [
     }
 ];
 
-// Configuration des routes pour les étudiants (ROLE_USER)
+
 const studentRoutes: AppRoute[] = [
     {
         path: '/student',
@@ -93,10 +93,10 @@ const adminRoutes: AppRoute[] = [
     }
 ];
 
-// Fonction pour créer une route protégée à partir d'une configuration
+
 function createProtectedRoute(routeConfig: AppRoute) {
     if (routeConfig.requiredRole) {
-        // Route qui nécessite un rôle spécifique
+      
         return (
             <Route
                 key={routeConfig.path}
@@ -109,7 +109,7 @@ function createProtectedRoute(routeConfig: AppRoute) {
             />
         );
     } else {
-        // Route publique (pas de protection)
+    
         return (
             <Route
                 key={routeConfig.path}

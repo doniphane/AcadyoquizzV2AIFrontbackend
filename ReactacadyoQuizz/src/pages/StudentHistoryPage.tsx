@@ -11,7 +11,7 @@ import type { TransformedAttempt, AttemptDetail } from '../types/studenthistory'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-// Interface pour les données reçues de l'API /api/user/my-attempts
+
 interface ApiAttempt {
   id: number;
   questionnaireTitre: string;

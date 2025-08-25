@@ -10,10 +10,7 @@ use Symfony\Component\Security\Core\User\UserInterface;
 /**
  * Service pour gérer les cookies JWT de manière sécurisée
  * 
- * Ce service :
- * 1. Crée des cookies HttpOnly sécurisés avec le token JWT
- * 2. Supprime les cookies lors de la déconnexion
- * 3. Configure les paramètres de sécurité appropriés
+ 
  */
 class JwtCookieService
 {
@@ -22,11 +19,10 @@ class JwtCookieService
 
     public function __construct(
         private JWTTokenManagerInterface $jwtManager
-    ) {
-    }
+    ) {}
 
     /**
-     * Crée un cookie HttpOnly sécurisé avec le token JWT
+
      * 
      * @param UserInterface $user L'utilisateur connecté
      * @return Cookie Le cookie sécurisé
@@ -43,15 +39,15 @@ class JwtCookieService
             time() + self::COOKIE_TTL,
             '/',
             null,
-            false, // secure - Désactivé en développement
-            false, // httpOnly - Désactivé en développement pour faciliter les tests
             false,
-            'Lax' // sameSite - Protection CSRF
+            false,
+            false,
+            'Lax'
         );
     }
 
-        /**
-     * Supprime le cookie d'authentification
+    /**
+     
      * 
      * @return Cookie Le cookie à supprimer
      */
@@ -60,13 +56,13 @@ class JwtCookieService
         return new Cookie(
             self::COOKIE_NAME,
             '',
-            time() - 3600, // Expire dans le passé
+            time() - 3600,
             '/',
             null,
-            false, // secure - Désactivé en développement
-            false, // httpOnly - Désactivé en développement
             false,
-            'Lax' // sameSite
+            false,
+            false,
+            'Lax'
         );
     }
 

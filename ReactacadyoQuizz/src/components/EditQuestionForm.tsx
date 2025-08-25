@@ -48,7 +48,7 @@ function EditQuestionForm({ question, onSave, onCancel }: EditQuestionFormProps)
 
     // Fonction pour supprimer une réponse
     const handleRemoveAnswer = (answerIndex: number): void => {
-        if (answers.length > 2) { // Garder au moins 2 réponses
+        if (answers.length > 2) { 
             const updatedAnswers = answers.filter((_, index) => index !== answerIndex);
             setAnswers(updatedAnswers);
         }
@@ -57,7 +57,7 @@ function EditQuestionForm({ question, onSave, onCancel }: EditQuestionFormProps)
     // Fonction pour ajouter une nouvelle réponse
     const handleAddAnswer = (): void => {
         const newAnswer: ApiAnswerData = {
-            id: Date.now(), // ID temporaire pour les nouvelles réponses
+            id: Date.now(), 
             texte: '',
             numeroOrdre: answers.length + 1,
             correct: false
@@ -128,10 +128,10 @@ function EditQuestionForm({ question, onSave, onCancel }: EditQuestionFormProps)
             // Créer l'objet question mis à jour
             const updatedQuestion: ApiQuestionData = {
                 ...question,
-                texte: questionText.trim(), // Nettoyer le texte avant de l'envoyer
+                texte: questionText.trim(), 
                 reponses: answers.map(answer => ({
                     ...answer,
-                    texte: answer.texte.trim() // Nettoyer aussi le texte des réponses
+                    texte: answer.texte.trim() 
                 }))
             };
 

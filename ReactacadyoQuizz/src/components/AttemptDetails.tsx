@@ -2,17 +2,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye, Clock, Trophy, Target } from 'lucide-react';
 import type { TransformedAttempt, AttemptDetail } from '../types/studenthistory';
 
-// Interface pour les props du composant
+
 interface AttemptDetailsProps {
     selectedAttempt: TransformedAttempt | null;
     attemptDetails: AttemptDetail[];
     loadingDetails: boolean;
 }
 
-/**
- * Composant pour afficher les détails d'une tentative de quiz
- * Affiche les informations du quiz et les détails des réponses
- */
+
 function AttemptDetails({ selectedAttempt, attemptDetails, loadingDetails }: AttemptDetailsProps) {
     return (
         <Card className="bg-gray-100 text-gray-900">
